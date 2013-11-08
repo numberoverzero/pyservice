@@ -1,0 +1,32 @@
+{
+  "name": "BeerInventoryService",
+  "operations": [
+    {
+      "name": "add_beer",
+      "input": ["name", "quantity", "price", "description"]
+    },
+
+    {
+      "name": "get_beer",
+      "input": ["name"],
+      "output": ["quantity", "price", "description"],
+      "raises": ["BeerNotFound"]
+    },
+
+    {
+      "name": "list_beers",
+      "input": [
+        {
+          "name": "continuation_token",
+          "required": false,
+          "default": null
+        }
+      ],
+      "output": [
+        "beers",
+        "total",
+        "continuation_token"
+      ]
+    }
+  ]
+}
