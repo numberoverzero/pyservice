@@ -1,4 +1,6 @@
 import os
+import pytest
+
 from pyservice import Service
 #For loading relative files
 here = os.path.dirname(os.path.realpath(__file__))
@@ -13,3 +15,8 @@ def test_from_filename():
     filename = os.path.join(here, "BeerService.json")
     my_service = Service.from_file(filename)
     assert my_service.description == "Parsed"
+
+def test_bad_json():
+    junk_string = "bad_json"
+    with pytest.raises(ValueError):
+        Service(junk_string)
