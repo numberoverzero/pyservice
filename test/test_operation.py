@@ -6,14 +6,6 @@ import pyservice
 
 j = json.loads
 
-def mock_bottle_json(mp, string):
-    '''Mock out bottle.request.json for testing operation wrapper'''
-    import bottle
-    class Request(object): pass
-    request = Request()
-    request.json = j(string)
-    mp.setattr(bottle, "request", request)
-
 def test_route():
     service = pyservice.Service("ServiceName")
     operation = pyservice.Operation(service, "CreateOperation")
@@ -221,18 +213,15 @@ def test_build_output_no_args():
     result = operation.build_output(out)
     assert result == {}
 
-def test_invoke_wrapped_func(monkeypatch):
-    # Mock out an input of ["Hello", "World"]
-    mock_bottle_json(monkeypatch, '{"a": "Hello", "b": "World"}')
-
-    data = j('{"name":"CreateOperation", "input": ["a", "b"], "output": ["ab"]}')
+def test_wrapped_func_returns_original():
+    data = j('{"name":"ConcatOperation", "input": ["a", "b"], "output": ["ab"]}')
     service = pyservice.Service("ServiceName")
-    operation = pyservice.Operation(service, "CreateOperation")
+    operation = pyservice.Operation(service, "ConcatOperation")
     pyservice.parse_operation(service, operation, data)
 
     def concat(a, b):
-        return a + " " + b
-    wrapped_operation = operation.wrap(concat)
+        return a + b
 
-    # No input since the json request body is loaded through bottle.request.json
-    assert wrapped_operation() == j('{"ab": "Hello World"}')
+    original_func = concat
+    wrapped_func = operation.wrap(concat)
+    assert original_func is wrapped_func

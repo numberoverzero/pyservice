@@ -82,6 +82,10 @@ class Operation(object):
             msg = "Does not match operation description"
             raise ValueError(BAD_FUNC_SIGNATURE.format(msg))
 
+        self.func = func
+        self._func_varnames = varnames
+
+        @self.service.app.post(self.route)
         def handle():
             # Load request body,
             # Build func args from request body
@@ -96,12 +100,8 @@ class Operation(object):
             # Bottle automatically converts dicts to json
             return self.build_output(out)
 
-        wrapper = self.service.app.post(self.route)
-        handle = wrapper(handle)
-        self.func = func
-        self._func_varnames = varnames
-
-        return handle
+        # Return the function unchanged so that it can still be invoked normally
+        return func
 
     def build_input(self, inp):
         if set(inp.keys()) != set(self.input):

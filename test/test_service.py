@@ -37,3 +37,15 @@ def test_operation_decorator():
 
     @service.operation("CreateOperation")
     def create(arg1): pass
+
+def test_decorated_function_returns_original():
+    data = j('{"name": "ServiceName", "operations": [{"name":"ConcatOperation", "input": ["a", "b"], "output": ["ab"]}]}')
+    service = pyservice.Service("ServiceName")
+    pyservice.parse_service(service, data)
+
+    def concat(a, b):
+        return a + b
+
+    original_func = concat
+    wrapped_func = service.operation("ConcatOperation")(concat)
+    assert original_func is wrapped_func
