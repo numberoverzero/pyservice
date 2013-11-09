@@ -16,6 +16,7 @@ def test_registration():
     operation = pyservice.Operation(service, "CreateOperation")
     assert "CreateOperation" in service.operations
     assert service.operations["CreateOperation"] is operation
+    assert not operation.mapped
 
 def test_wrap_two_functions():
     service = pyservice.Service("ServiceName")
@@ -225,3 +226,4 @@ def test_wrapped_func_returns_original():
     original_func = concat
     wrapped_func = operation.wrap(concat)
     assert original_func is wrapped_func
+    assert operation.mapped

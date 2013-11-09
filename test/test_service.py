@@ -16,13 +16,15 @@ def test_bad_json():
 def test_empty_service():
     junk_string = '{"name": "foo", "operations": []}'
     junk_json = json.loads(junk_string)
-    my_service = pyservice.Service.from_json(junk_json)
-    assert len(my_service.operations) == 0
+    service = pyservice.Service.from_json(junk_json)
+    assert len(service.operations) == 0
+    assert service.mapped
 
 def test_from_filename():
     filename = os.path.join(here, "BeerService.json")
-    my_service = pyservice.Service.from_file(filename)
-    assert len(my_service.operations) == 3
+    service = pyservice.Service.from_file(filename)
+    assert len(service.operations) == 3
+    assert not service.mapped
 
 def test_duplicate_register():
     service = pyservice.Service("ServiceName")
@@ -38,6 +40,8 @@ def test_operation_decorator():
     @service.operation("CreateOperation")
     def create(arg1): pass
 
+    assert service.mapped
+
 def test_decorated_function_returns_original():
     data = j('{"name": "ServiceName", "operations": [{"name":"ConcatOperation", "input": ["a", "b"], "output": ["ab"]}]}')
     service = pyservice.Service("ServiceName")
@@ -49,3 +53,4 @@ def test_decorated_function_returns_original():
     original_func = concat
     wrapped_func = service.operation("ConcatOperation")(concat)
     assert original_func is wrapped_func
+    assert service.mapped

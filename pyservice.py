@@ -57,7 +57,6 @@ class Operation(object):
         self.output = []
         self.metadata = {}
         self.func = None
-        self._func_varnames = None
 
         # Build bottle route
         route = {
@@ -65,6 +64,11 @@ class Operation(object):
             'operation': self.name
         }
         self.route = "/{service}/{operation}".format(**route)
+
+    @property
+    def mapped(self):
+        '''True if this operation has been mapped to a function, including bottle routing'''
+        return bool(self.func)
 
     def wrap(self, func, **kwargs):
         if self.func:
@@ -83,21 +87,16 @@ class Operation(object):
             raise ValueError(BAD_FUNC_SIGNATURE.format(msg))
 
         self.func = func
-        self._func_varnames = varnames
 
         @self.service.app.post(self.route)
         def handle():
-            # Load request body,
             # Build func args from request body
-            #  + service description defaults
-            inp = bottle.request.json
-            inp = self.build_input(inp)
+            inp = self.build_input(bottle.request.json)
 
             # Invoke function
             out = self.func(*inp)
 
-            # Build return values
-            # Bottle automatically converts dicts to json
+            # Build return values into dict
             return self.build_output(out)
 
         # Return the function unchanged so that it can still be invoked normally
@@ -107,9 +106,9 @@ class Operation(object):
         if set(inp.keys()) != set(self.input):
             msg = "Input {} does not match required input {}"
             raise ServiceException(msg.format(inp.keys(), self.input))
-        if self._func_varnames is None:
+        if self.func is None:
             raise ServiceException("No wrapped function to order input args by!")
-        return [inp[varname] for varname in self._func_varnames]
+        return [inp[varname] for varname in self.func.__code__.co_varnames]
 
     def build_output(self, out):
         if len(out) != 1:
@@ -151,3 +150,8 @@ class Service(object):
     def operation(self, name, **kwargs):
         '''Return a decorator that maps an operation name to a function'''
         return lambda func: self.operations[name].wrap(func, **kwargs)
+
+    @property
+    def mapped(self):
+        '''True if all operations have been mapped'''
+        return all(op.mapped for op in six.itervalues(self.operations))
