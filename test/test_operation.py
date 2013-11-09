@@ -80,6 +80,15 @@ def test_wrap_arg_name_mismatch():
         def create(alpha, beta): pass
         operation.wrap(create)
 
+def test_wrap_no_input():
+    data = j('{"name":"CreateOperation", "input": []}')
+    service = pyservice.Service("ServiceName")
+    operation = pyservice.Operation(service, "CreateOperation")
+    pyservice.parse_operation(service, operation, data)
+
+    def create(): pass
+    operation.wrap(create)
+
 def test_build_input_ordering():
     data = j('{"name":"CreateOperation", "input": ["a", "b", "c"]}')
     service = pyservice.Service("ServiceName")
@@ -109,6 +118,17 @@ def test_build_input_without_wrapping():
     }
     with pytest.raises(pyservice.ServiceException):
         operation.build_input(inp)
+
+def test_build_input_no_args():
+    data = j('{"name":"CreateOperation", "input": []}')
+    service = pyservice.Service("ServiceName")
+    operation = pyservice.Operation(service, "CreateOperation")
+    pyservice.parse_operation(service, operation, data)
+    operation.wrap(lambda: None)
+
+    inp = {}
+    args = operation.build_input(inp)
+    assert args == []
 
 def test_build_input_too_few_args():
     data = j('{"name":"CreateOperation", "input": ["a", "b"]}')
@@ -182,3 +202,13 @@ def test_build_output_ordering():
     out = ["Hello", "World"]
     result = operation.build_output(out)
     assert result == {"a": "Hello", "b": "World"}
+
+def test_build_output_no_args():
+    data = j('{"name":"CreateOperation", "output": []}')
+    service = pyservice.Service("ServiceName")
+    operation = pyservice.Operation(service, "CreateOperation")
+    pyservice.parse_operation(service, operation, data)
+
+    out = []
+    result = operation.build_output(out)
+    assert result == {}
