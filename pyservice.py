@@ -91,10 +91,9 @@ class Operation(object):
             # Invoke function
             out = self.func(*inp)
 
-            # Build return values,
-            # Return output as json
-            out = self.build_output(out)
-            return json.dumps(out)
+            # Build return values
+            # Bottle automatically converts dicts to json
+            return self.build_output(out)
 
         wrapper = self.service.app.post(self.route)
         handle = wrapper(handle)
