@@ -42,7 +42,7 @@ setup(
     author_email='joe.mcross@gmail.com',
     description='web services with python made easy',
     long_description=long_description,
-    packages=['pyservice'],
+    py_modules=['pyservice'],
     include_package_data=True,
     platforms='any',
     test_suite='pyservice.test',
