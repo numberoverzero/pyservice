@@ -12,6 +12,9 @@ RESERVED_OPERATION_KEYS = [
     "output"
 ]
 
+OP_ALREADY_MAPPED = "Route has already been created for operation {}"
+OP_ALREADY_REGISTERED = "Tried to register duplicate operation {}"
+
 def parse_name(data):
     return data["name"]
 
@@ -46,6 +49,7 @@ class Operation(object):
         self.input = []
         self.output = []
         self.metadata = {}
+        self.func = None
 
         # Build bottle route
         route = {
@@ -55,10 +59,9 @@ class Operation(object):
         self.route = "/{service}/{operation}".format(**route)
 
     def wrap(self, func, **kwargs):
+        if self.func:
+            raise ValueError(OP_ALREADY_MAPPED.format(self.name))
         self.func = func
-
-        # Make sure operation hasn't already been mapped
-        # TODO
 
         # Validate func args match description args exactly
         # TODO
@@ -66,7 +69,8 @@ class Operation(object):
         @self.service.app.post(self.route)
         def wrapped_func():
             # Load request body,
-            # Build func args from request body + service description defaults
+            # Build func args from request body
+            #  + service description defaults
             inp = bottle.request.json
             inp = self.build_input(inp)
 
@@ -106,7 +110,7 @@ class Service(object):
 
     def register(self, name, operation):
         if name in self.operations:
-            raise KeyError("Tried to register duplicate operation {}".format(name))
+            raise KeyError(OP_ALREADY_REGISTERED.format(name))
         self.operations[name] = operation
 
     def operation(self, name, **kwargs):
