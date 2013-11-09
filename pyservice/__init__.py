@@ -1,6 +1,16 @@
 import json
 import bottle
 
+RESERVED_SERVICE_KEYS = [
+    "name",
+    "operations"
+]
+
+RESERVED_OPERATION_KEYS = [
+    "name",
+    "input",
+    "output"
+]
 
 def parse_name(data):
     return data["name"]
@@ -8,6 +18,9 @@ def parse_name(data):
 def parse_operation(service, operation, data):
     operation.input = data.get("input", [])
     operation.output = data.get("output", [])
+    for key in data:
+        if key not in RESERVED_OPERATION_KEYS:
+            operation.metadata[key] = data[key]
     return operation
 
 def parse_service(service, data):
@@ -16,6 +29,9 @@ def parse_service(service, data):
         operation = Operation(service, name)
         parse_operation(service, operation, opdata)
         service.operations.append(operation)
+    for key in data:
+        if key not in RESERVED_SERVICE_KEYS:
+            service.metadata[key] = data[key]
     return service
 
 class Operation(object):
@@ -24,6 +40,7 @@ class Operation(object):
         self.name = name
         self.input = []
         self.output = []
+        self.metadata = {}
 
         # Build bottle route
         route = {
@@ -69,6 +86,7 @@ class Service(object):
         self.name = name
         self.operations = []
         self.app = bottle.Bottle()
+        self.metadata = {}
 
     @classmethod
     def from_json(cls, data):
