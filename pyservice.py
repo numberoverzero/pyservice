@@ -56,6 +56,7 @@ class Operation(object):
         self.output = []
         self.metadata = {}
         self.func = None
+        self._func_varnames = None
 
         # Build bottle route
         route = {
@@ -98,6 +99,7 @@ class Operation(object):
         wrapper = self.service.app.post(self.route)
         handle = wrapper(handle)
         self.func = func
+        self._func_varnames = varnames
 
         return handle
 
@@ -105,6 +107,8 @@ class Operation(object):
         if set(inp.keys()) != set(self.input):
             msg = "Input {} does not match required input {}"
             raise ServiceException(msg.format(inp.keys(), self.input))
+        if self._func_varnames is None:
+            raise ServiceException("No wrapped function to order input args by!")
 
     def build_output(self, out):
         if set(out.keys()) != set(self.output):

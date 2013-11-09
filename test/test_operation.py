@@ -78,11 +78,24 @@ def test_wrap_arg_name_mismatch():
         def create(alpha, beta): pass
         operation.wrap(create)
 
+def test_build_without_wrapping():
+    data = j('{"name":"CreateOperation", "input": ["a", "b"]}')
+    service = pyservice.Service("ServiceName")
+    operation = pyservice.Operation(service, "CreateOperation")
+    pyservice.parse_operation(service, operation, data)
+
+    inp = {
+        "a": "Hello"
+    }
+    with pytest.raises(pyservice.ServiceException):
+        operation.build_input(inp)
+
 def test_build_input_too_few_args():
     data = j('{"name":"CreateOperation", "input": ["a", "b"]}')
     service = pyservice.Service("ServiceName")
     operation = pyservice.Operation(service, "CreateOperation")
     pyservice.parse_operation(service, operation, data)
+    operation.wrap(lambda a, b: None)
 
     inp = {
         "a": "Hello"
@@ -95,6 +108,7 @@ def test_build_input_too_many_args():
     service = pyservice.Service("ServiceName")
     operation = pyservice.Operation(service, "CreateOperation")
     pyservice.parse_operation(service, operation, data)
+    operation.wrap(lambda a, b: None)
 
     inp = {
         "a": "Hello",
@@ -109,6 +123,7 @@ def test_build_input_wrong_args():
     service = pyservice.Service("ServiceName")
     operation = pyservice.Operation(service, "CreateOperation")
     pyservice.parse_operation(service, operation, data)
+    operation.wrap(lambda a, b: None)
 
     inp = {
         "wrong": "Hello",
