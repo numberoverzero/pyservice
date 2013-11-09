@@ -16,19 +16,22 @@ def parse_name(data):
     return data["name"]
 
 def parse_operation(service, operation, data):
+    # Load opration input/output
     operation.input = data.get("input", [])
     operation.output = data.get("output", [])
+    # Dump extra fields in metadta
     for key in data:
         if key not in RESERVED_OPERATION_KEYS:
             operation.metadata[key] = data[key]
     return operation
 
 def parse_service(service, data):
+    # Load up operations
     for opdata in data.get("operations", []):
-        name = opdata["name"]
+        name = parse_name(opdata)
         operation = Operation(service, name)
         parse_operation(service, operation, opdata)
-        service.operations.append(operation)
+    # Dump extra fields in metadta
     for key in data:
         if key not in RESERVED_SERVICE_KEYS:
             service.metadata[key] = data[key]
@@ -36,8 +39,10 @@ def parse_service(service, data):
 
 class Operation(object):
     def __init__(self, service, name):
-        self.service = service
         self.name = name
+        self.service = service
+        service.register(name, self)
+
         self.input = []
         self.output = []
         self.metadata = {}
@@ -84,7 +89,7 @@ class Operation(object):
 class Service(object):
     def __init__(self, name):
         self.name = name
-        self.operations = []
+        self.operations = {}
         self.app = bottle.Bottle()
         self.metadata = {}
 
@@ -98,6 +103,11 @@ class Service(object):
     def from_file(cls, filename):
         with open(filename) as f:
             return Service.from_json(json.loads(f.read()))
+
+    def register(self, name, operation):
+        if name in self.operations:
+            raise KeyError("Tried to register duplicate operation {}".format(name))
+        self.operations[name] = operation
 
     def operation(self, name, **kwargs):
         '''Return a decorator that maps an operation name to a function'''
