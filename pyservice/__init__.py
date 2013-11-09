@@ -14,6 +14,7 @@ RESERVED_OPERATION_KEYS = [
 
 OP_ALREADY_MAPPED = "Route has already been created for operation {}"
 OP_ALREADY_REGISTERED = "Tried to register duplicate operation {}"
+BAD_FUNC_SIGNATURE = "Invalid function signature: "
 
 def parse_name(data):
     return data["name"]
@@ -61,13 +62,20 @@ class Operation(object):
     def wrap(self, func, **kwargs):
         if self.func:
             raise ValueError(OP_ALREADY_MAPPED.format(self.name))
-        self.func = func
 
-        # Validate func args match description args exactly
-        # TODO
+        # Function signature cannot include *args or **kwargs
+        varnames = func.__code__.co_varnames
+        argcount = func.__code__.co_argcount
+        if len(varnames) != argcount:
+            raise ValueError(
+                BAD_FUNC_SIGNATURE + "Contains *args or **kwargs")
 
-        @self.service.app.post(self.route)
-        def wrapped_func():
+        # Args must be an exact match
+        if set(varnames) != set(self.input):
+            raise ValueError(
+                BAD_FUNC_SIGNATURE + "Does not match operation description")
+
+        def handle():
             # Load request body,
             # Build func args from request body
             #  + service description defaults
@@ -81,7 +89,12 @@ class Operation(object):
             # Return output as json
             out = self.build_output(out)
             return json.dumps(out)
-        return wrapped_func
+
+        wrapper = self.service.app.post(self.route)
+        handle = wrapper(handle)
+        self.func = func
+
+        return handle
 
     def build_input(self, inp):
         pass

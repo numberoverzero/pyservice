@@ -35,14 +35,14 @@ def test_parse_basic_operation():
     assert set(operation.input) == set(["in1", "in2", "in3"])
     assert set(operation.output) == set(["out1", "out2"])
 
-def test_parse_service_meta():
+def test_parse_service_metadata():
     data = j('{"name": "ServiceName", "foo": ["bar"]}')
     service = pyservice.Service("ServiceName")
     pyservice.parse_service(service, data)
     assert "foo" in service.metadata
     assert service.metadata["foo"] == ["bar"]
 
-def test_parse_operation_meta():
+def test_parse_operation_metadata():
     data = j('{"name": "CreateOperation", "foo": ["bar"]}')
     service = pyservice.Service("ServiceName")
     operation = pyservice.Operation(service, "CreateOperation")
