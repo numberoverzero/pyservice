@@ -115,7 +115,7 @@ class Operation(object):
         if len(out) != len(self.output):
             msg = "Output {} does not match expected output format {}"
             raise ServiceException(msg.format(out, self.output))
-
+        return {key: value for key, value in zip(self.output, out)}
 
 class Service(object):
     def __init__(self, name):

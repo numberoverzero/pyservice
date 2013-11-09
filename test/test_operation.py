@@ -172,3 +172,13 @@ def test_build_output_too_many_args():
     out = ["Hello", "World", "!"]
     with pytest.raises(pyservice.ServiceException):
         operation.build_output(out)
+
+def test_build_output_ordering():
+    data = j('{"name":"CreateOperation", "output": ["a", "b"]}')
+    service = pyservice.Service("ServiceName")
+    operation = pyservice.Operation(service, "CreateOperation")
+    pyservice.parse_operation(service, operation, data)
+
+    out = ["Hello", "World"]
+    result = operation.build_output(out)
+    assert result == {"a": "Hello", "b": "World"}
