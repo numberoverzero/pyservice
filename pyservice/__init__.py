@@ -1,63 +1,86 @@
 import json
-import functools
 import bottle
 
-def parse_description(service, description):
-    description = json.loads(description)
-    return "Parsed"
+
+def parse_name(data):
+    return data["name"]
+
+def parse_operation(service, operation, data):
+    operation.input = data.get("input", [])
+    operation.output = data.get("output", [])
+    return operation
+
+def parse_service(service, data):
+    for opdata in data.get("operations", []):
+        name = opdata["name"]
+        operation = Operation(service, name)
+        parse_operation(service, operation, opdata)
+        service.operations.append(operation)
+    return service
+
+class Operation(object):
+    def __init__(self, service, name):
+        self.service = service
+        self.name = name
+        self.input = []
+        self.output = []
+
+        # Build bottle route
+        route = {
+            'service': self.service.name,
+            'operation': self.name
+        }
+        self.route = "/{service}/{operation}".format(**route)
+
+    def wrap(self, func, **kwargs):
+        self.func = func
+
+        # Make sure operation hasn't already been mapped
+        # TODO
+
+        # Validate func args match description args exactly
+        # TODO
+
+        @self.service.app.post(self.route)
+        def wrapped_func():
+            # Load request body,
+            # Build func args from request body + service description defaults
+            inp = bottle.request.json
+            inp = self.build_input(inp)
+
+            # Invoke function
+            out = self.func(*inp)
+
+            # Build return values,
+            # Return output as json
+            out = self.build_output(out)
+            return json.dumps(out)
+        return wrapped_func
+
+    def build_input(self, inp):
+        pass
+
+    def build_output(self, out):
+        pass
 
 
 class Service(object):
-    def __init__(self, description):
-        '''Load a service description to build against.'''
-        self.description = parse_description(self, description)
-        self._app = bottle.Bottle()
+    def __init__(self, name):
+        self.name = name
+        self.operations = []
+        self.app = bottle.Bottle()
+
+    @classmethod
+    def from_json(cls, data):
+        name = parse_name(data)
+        service = Service(name)
+        return parse_service(service, data)
 
     @classmethod
     def from_file(cls, filename):
-        '''Load description from file'''
         with open(filename) as f:
-            return Service(f.read())
+            return Service.from_json(json.loads(f.read()))
 
     def operation(self, name, **kwargs):
-        '''Map an operation name to a function'''
-        def wrapper(func):
-            # Make sure operation hasn't already been mapped
-            # TODO
-
-            # Validate func args match description args exactly
-            # TODO
-
-            # Build bottle route
-            route = {
-                'prefix': "",
-                'service': self.description.name,
-                'operation': name
-            }
-            route = self._app.post("{prefix}/{service}/{operation}".format(**route))
-
-            @functools.wraps(func)
-            @route
-            def wrapped_func():
-                # Load request body,
-                # Build func args from request body + service description defaults
-                input = bottle.request.json
-                input = self.build_input(name, input)
-
-                # Invoke function
-                output = func(*input)
-
-                # Build return values,
-                # Return output as json
-                output = self.build_output(name, output)
-                return json.dumps(output)
-
-            return wrapped_func
-        self._loaded_operations.append(name)
-        return wrapper
-
-    def build_input(self, name, input):
-        pass
-
-    def build_output(self, name, output):
-        pass
+        '''Return a decorator that maps an operation name to a function'''
+        return lambda func: self.operations[name].wrap(func, **kwargs)

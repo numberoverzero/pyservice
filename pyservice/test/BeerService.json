@@ -15,13 +15,7 @@
 
     {
       "name": "list_beers",
-      "input": [
-        {
-          "name": "continuation_token",
-          "required": false,
-          "default": null
-        }
-      ],
+      "input": ["continuation_token"],
       "output": [
         "beers",
         "total",
