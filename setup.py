@@ -37,7 +37,7 @@ setup(
     license='MIT',
     author='Joe Cross',
     tests_require=['pytest', 'tox'],
-    install_requires=['bottle'],
+    install_requires=['bottle', 'six'],
     cmdclass={'test': Tox},
     author_email='joe.mcross@gmail.com',
     description='web services with python made easy',

@@ -1,3 +1,4 @@
+import six
 import json
 import bottle
 
@@ -111,6 +112,13 @@ class Operation(object):
         return [inp[varname] for varname in self._func_varnames]
 
     def build_output(self, out):
+        if len(out) != 1:
+            # Check for string/unicode
+            is_string = isinstance(out, six.string_types)
+            is_text = isinstance(out, six.text_type)
+            if is_string or is_text:
+                out = [out]
+
         if len(out) != len(self.output):
             msg = "Output {} does not match expected output format {}"
             raise ServiceException(msg.format(out, self.output))
