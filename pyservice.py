@@ -109,6 +109,7 @@ class Operation(object):
             raise ServiceException(msg.format(inp.keys(), self.input))
         if self._func_varnames is None:
             raise ServiceException("No wrapped function to order input args by!")
+        return [inp[varname] for varname in self._func_varnames]
 
     def build_output(self, out):
         if set(out.keys()) != set(self.output):

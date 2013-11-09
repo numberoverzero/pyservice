@@ -1,5 +1,7 @@
 import json
 import pytest
+import collections
+
 import pyservice
 
 j = json.loads
@@ -78,7 +80,25 @@ def test_wrap_arg_name_mismatch():
         def create(alpha, beta): pass
         operation.wrap(create)
 
-def test_build_without_wrapping():
+def test_build_input_ordering():
+    data = j('{"name":"CreateOperation", "input": ["a", "b", "c"]}')
+    service = pyservice.Service("ServiceName")
+    operation = pyservice.Operation(service, "CreateOperation")
+    pyservice.parse_operation(service, operation, data)
+    operation.wrap(lambda a, b, c: None)
+
+    # Explicitly pass args out of order to make sure
+    # we're not taking advantage of dict hashing
+    # when iterating keys to build args
+    inp = collections.OrderedDict([
+        ("b", "World"),
+        ("c", "!"),
+        ("a", "Hello")
+    ])
+    args = operation.build_input(inp)
+    assert args == ["Hello", "World", "!"]
+
+def test_build_input_without_wrapping():
     data = j('{"name":"CreateOperation", "input": ["a", "b"]}')
     service = pyservice.Service("ServiceName")
     operation = pyservice.Operation(service, "CreateOperation")
