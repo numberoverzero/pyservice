@@ -14,7 +14,11 @@ RESERVED_OPERATION_KEYS = [
 
 OP_ALREADY_MAPPED = "Route has already been created for operation {}"
 OP_ALREADY_REGISTERED = "Tried to register duplicate operation {}"
-BAD_FUNC_SIGNATURE = "Invalid function signature: "
+BAD_FUNC_SIGNATURE = "Invalid function signature: {}"
+
+
+class ServiceException(Exception):
+    pass
 
 def parse_name(data):
     return data["name"]
@@ -40,6 +44,7 @@ def parse_service(service, data):
         if key not in RESERVED_SERVICE_KEYS:
             service.metadata[key] = data[key]
     return service
+
 
 class Operation(object):
     def __init__(self, service, name):
@@ -67,13 +72,13 @@ class Operation(object):
         varnames = func.__code__.co_varnames
         argcount = func.__code__.co_argcount
         if len(varnames) != argcount:
-            raise ValueError(
-                BAD_FUNC_SIGNATURE + "Contains *args or **kwargs")
+            msg = "Contains *args or **kwargs"
+            raise ValueError(BAD_FUNC_SIGNATURE.format(msg))
 
         # Args must be an exact match
         if set(varnames) != set(self.input):
-            raise ValueError(
-                BAD_FUNC_SIGNATURE + "Does not match operation description")
+            msg = "Does not match operation description"
+            raise ValueError(BAD_FUNC_SIGNATURE.format(msg))
 
         def handle():
             # Load request body,
@@ -97,10 +102,14 @@ class Operation(object):
         return handle
 
     def build_input(self, inp):
-        pass
+        if set(inp.keys()) != set(self.input):
+            msg = "Input {} does not match required input {}"
+            raise ServiceException(msg.format(inp.keys(), self.input))
 
     def build_output(self, out):
-        pass
+        if set(out.keys()) != set(self.output):
+            msg = "Output {} does not match expected output {}"
+            raise ServiceException(msg.format(out.keys(), self.output))
 
 
 class Service(object):
