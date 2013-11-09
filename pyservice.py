@@ -112,9 +112,9 @@ class Operation(object):
         return [inp[varname] for varname in self._func_varnames]
 
     def build_output(self, out):
-        if set(out.keys()) != set(self.output):
-            msg = "Output {} does not match expected output {}"
-            raise ServiceException(msg.format(out.keys(), self.output))
+        if len(out) != len(self.output):
+            msg = "Output {} does not match expected output format {}"
+            raise ServiceException(msg.format(out, self.output))
 
 
 class Service(object):

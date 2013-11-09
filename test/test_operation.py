@@ -159,11 +159,9 @@ def test_build_output_too_few_args():
     operation = pyservice.Operation(service, "CreateOperation")
     pyservice.parse_operation(service, operation, data)
 
-    inp = {
-        "a": "Hello"
-    }
+    out = ["Hello"]
     with pytest.raises(pyservice.ServiceException):
-        operation.build_output(inp)
+        operation.build_output(out)
 
 def test_build_output_too_many_args():
     data = j('{"name":"CreateOperation", "output": ["a", "b"]}')
@@ -171,23 +169,6 @@ def test_build_output_too_many_args():
     operation = pyservice.Operation(service, "CreateOperation")
     pyservice.parse_operation(service, operation, data)
 
-    inp = {
-        "a": "Hello",
-        "b": "World",
-        "c": "!"
-    }
+    out = ["Hello", "World", "!"]
     with pytest.raises(pyservice.ServiceException):
-        operation.build_output(inp)
-
-def test_build_output_wrong_args():
-    data = j('{"name":"CreateOperation", "output": ["a", "b"]}')
-    service = pyservice.Service("ServiceName")
-    operation = pyservice.Operation(service, "CreateOperation")
-    pyservice.parse_operation(service, operation, data)
-
-    inp = {
-        "wrong": "Hello",
-        "keys": "World",
-    }
-    with pytest.raises(pyservice.ServiceException):
-        operation.build_output(inp)
+        operation.build_output(out)
