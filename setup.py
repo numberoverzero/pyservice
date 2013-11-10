@@ -36,7 +36,6 @@ setup(
     url='http://github.com/numberoverzero/pyservice/',
     license='MIT',
     author='Joe Cross',
-    tests_require=['pytest', 'tox'],
     install_requires=['bottle', 'six'],
     cmdclass={'test': Tox},
     author_email='joe.mcross@gmail.com',

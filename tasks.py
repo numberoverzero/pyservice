@@ -15,6 +15,6 @@ def build():
     run("python setup.py develop")
     pass
 
-@invoke.task('clean', 'build')
+@invoke.task('clean')
 def test():
     run('tox')
