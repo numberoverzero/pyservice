@@ -6,6 +6,11 @@ import pyservice
 
 j = json.loads
 
+def test_invalid_name():
+    service = pyservice.Service("ServiceName")
+    with pytest.raises(ValueError):
+        pyservice.Operation(service, "_invalid_leading_underscore")
+
 def test_route():
     service = pyservice.Service("ServiceName")
     operation = pyservice.Operation(service, "CreateOperation")

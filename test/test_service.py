@@ -10,6 +10,9 @@ j = json.loads
 #For loading relative files
 here = os.path.dirname(os.path.realpath(__file__))
 
+def test_invalid_name():
+    with pytest.raises(ValueError):
+        pyservice.Service("_invalid_leading_underscore")
 
 def test_bad_json():
     not_json = "bad_json"

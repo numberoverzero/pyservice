@@ -1,11 +1,46 @@
 import json
+import pytest
+
 import pyservice
 
 j = json.loads
 
+VALID_NAMES = [
+    "b",
+    "B",
+    "lowercase_with_underscores",
+    "UPPERCASE_WITH_UNDERSCORES",
+    "mixedCase",
+    "contains2numbers"
+]
+
+INVALID_NAMES = [
+    "_leading_undescore",
+    "3leading_number",
+    "contains/slash",
+    "contains.period",
+    "contains-dash",
+    "contains+plus",
+    "contains space"
+]
+
+def test_validate_names():
+    for name in VALID_NAMES:
+        pyservice.validate_name(name)
+
+    for name in INVALID_NAMES:
+        with pytest.raises(ValueError):
+            pyservice.validate_name(name)
+
 def test_parse_name():
-    data = j('{"name": "ServiceName"}')
-    assert pyservice.parse_name(data) == "ServiceName"
+    for name in VALID_NAMES:
+        data = j('{{"name": "{}"}}'.format(name))
+        assert pyservice.parse_name(data) == name
+
+    for name in INVALID_NAMES:
+        data = j('{{"name": "{}"}}'.format(name))
+        with pytest.raises(ValueError):
+            pyservice.parse_name(data)
 
 def test_parse_empty_service():
     data = j('{"name": "ServiceName"}')

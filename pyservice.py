@@ -1,3 +1,4 @@
+import re
 import six
 import json
 import bottle
@@ -17,13 +18,20 @@ OP_ALREADY_MAPPED = "Route has already been created for operation {}"
 OP_ALREADY_REGISTERED = "Tried to register duplicate operation {}"
 BAD_FUNC_SIGNATURE = "Invalid function signature: {}"
 
+NAME_RE = re.compile("^[a-zA-Z]\w*$")
 
 class ServiceException(Exception):
     '''Represents an error during Service operation'''
     pass
 
+def validate_name(name):
+    if not NAME_RE.search(name):
+        raise ValueError("Invalid name: '{}'".format(name))
+
 def parse_name(data):
-    return data["name"]
+    name = data["name"]
+    validate_name(name)
+    return name
 
 def parse_operation(service, data):
     operation = Operation(service, parse_name(data))
@@ -49,6 +57,7 @@ def parse_service(data):
 
 class Operation(object):
     def __init__(self, service, name):
+        validate_name(name)
         self.name = name
         self.service = service
         service.register(name, self)
@@ -121,6 +130,7 @@ class Operation(object):
 
 class Service(object):
     def __init__(self, name):
+        validate_name(name)
         self.name = name
         self.operations = {}
         self.app = bottle.Bottle()
