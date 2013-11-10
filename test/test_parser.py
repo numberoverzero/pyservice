@@ -69,13 +69,13 @@ def test_parse_basic_operation():
 def test_parse_service_metadata():
     data = j('{"name": "ServiceName", "foo": ["bar"]}')
     service = pyservice.parse_service(data)
-    assert "foo" in service.metadata
-    assert service.metadata["foo"] == ["bar"]
+    assert "foo" in service._metadata
+    assert service._metadata["foo"] == ["bar"]
 
 def test_parse_operation_metadata():
     data = j('{"name": "CreateOperation", "foo": ["bar"]}')
     service = pyservice.Service("ServiceName")
     operation = pyservice.parse_operation(service, data)
-    assert not service.metadata
-    assert "foo" in operation.metadata
-    assert operation.metadata["foo"] == ["bar"]
+    assert not service._metadata
+    assert "foo" in operation._metadata
+    assert operation._metadata["foo"] == ["bar"]

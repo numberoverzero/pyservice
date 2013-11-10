@@ -2,27 +2,35 @@ import re
 import six
 import json
 import bottle
+import functools
 
 RESERVED_SERVICE_KEYS = [
     "name",
-    "operations"
+    "operations",
+    "exceptions",
+    "metadata",
+    "operation",
+    "raise_",
+    "run"
 ]
 
 RESERVED_OPERATION_KEYS = [
     "name",
     "input",
-    "output"
+    "output",
+    "exceptions",
+    "metadata"
 ]
 
 OP_ALREADY_MAPPED = "Route has already been created for operation {}"
 OP_ALREADY_REGISTERED = "Tried to register duplicate operation {}"
+EX_ALREADY_REGISTERED = "Tried to register duplicate exception {}"
 BAD_FUNC_SIGNATURE = "Invalid function signature: {}"
 
+# Most names can only be \w*,
+# with the special restriction that the
+# first character must be a letter
 NAME_RE = re.compile("^[a-zA-Z]\w*$")
-
-class ServiceException(Exception):
-    '''Represents an error during Service operation'''
-    pass
 
 def validate_name(name):
     if not NAME_RE.search(name):
@@ -35,12 +43,15 @@ def parse_name(data):
 
 def parse_operation(service, data):
     operation = Operation(service, parse_name(data))
-    operation.input = data.get("input", [])
-    operation.output = data.get("output", [])
+    for attr in ["input", "output", "exceptions"]:
+        value = data.get(attr, [])
+        # Validate all fields are valid
+        map(validate_name, value)
+        setattr(operation, attr, value)
     # Dump extra fields in metadta
     for key in data:
         if key not in RESERVED_OPERATION_KEYS:
-            operation.metadata[key] = data[key]
+            operation._metadata[key] = data[key]
     return operation
 
 def parse_service(data):
@@ -51,7 +62,7 @@ def parse_service(data):
     # Dump extra fields in metadta
     for key in data:
         if key not in RESERVED_SERVICE_KEYS:
-            service.metadata[key] = data[key]
+            service._metadata[key] = data[key]
     return service
 
 
@@ -59,28 +70,28 @@ class Operation(object):
     def __init__(self, service, name):
         validate_name(name)
         self.name = name
-        self.service = service
-        service.register(name, self)
+        self._service = service
+        service._register_operation(name, self)
 
         self.input = []
         self.output = []
-        self.metadata = {}
-        self.func = None
+        self._metadata = {}
+        self._func = None
 
         # Build bottle route
         route = {
-            'service': self.service.name,
+            'service': self._service.name,
             'operation': self.name
         }
-        self.route = "/{service}/{operation}".format(**route)
+        self._route = "/{service}/{operation}".format(**route)
 
     @property
-    def mapped(self):
+    def _mapped(self):
         '''True if this operation has been mapped to a function, including bottle routing'''
-        return bool(self.func)
+        return bool(self._func)
 
-    def wrap(self, func, **kwargs):
-        if self.func:
+    def _wrap(self, func, **kwargs):
+        if self._func:
             raise ValueError(OP_ALREADY_MAPPED.format(self.name))
 
         # Function signature cannot include *args or **kwargs
@@ -95,26 +106,33 @@ class Operation(object):
             msg = "Does not match operation description"
             raise ValueError(BAD_FUNC_SIGNATURE.format(msg))
 
-        self.func = func
+        self._func = func
 
-        @self.service.app.post(self.route)
+        @self._service._app.post(self._route)
         def handle():
-            input = self.build_input(bottle.request.json)
-            output = self.func(*input)
-            return self.build_output(output)
+            try:
+                input = self._build_input(bottle.request.json)
+                output = self._func(*input)
+                return self._build_output(output)
+            # Don't catch bottle exceptions, such as HTTPError
+            # Otherwise stack traces during debugging are lost
+            except bottle.BottleException:
+                raise
+            except Exception as e:
+                return build_exception(e)
 
         # Return the function unchanged so that it can still be invoked normally
         return func
 
-    def build_input(self, input):
+    def _build_input(self, input):
         if set(input.keys()) != set(self.input):
             msg = "Input {} does not match required input {}"
-            raise ServiceException(msg.format(input.keys(), self.input))
-        if self.func is None:
-            raise ServiceException("No wrapped function to order input args by!")
-        return [input[varname] for varname in self.func.__code__.co_varnames]
+            raise ClientException(msg.format(input.keys(), self.input))
+        if self._func is None:
+            raise ServerException("No wrapped function to order input args by!")
+        return [input[varname] for varname in self._func.__code__.co_varnames]
 
-    def build_output(self, output):
+    def _build_output(self, output):
         if len(output) != 1:
             # Check for string/unicode
             is_string = isinstance(output, six.string_types)
@@ -124,8 +142,23 @@ class Operation(object):
 
         if len(output) != len(self.output):
             msg = "Output {} does not match expected output format {}"
-            raise ServiceException(msg.format(output, self.output))
+            raise ServerException(msg.format(output, self.output))
         return {key: value for key, value in zip(self.output, output)}
+
+    def _build_exception(self, exception):
+        # Whitelist on registered service exceptions
+        # anything else gets a general "Exception" and dummy message
+        whitelisted = exception.__class__ in self._service.exceptions
+        debugging = self._service.debug
+        if not whitelisted and not debugging:
+            exception = ServerException()
+
+        return {
+            "_exception": {
+                "cls": exception.__class__,
+                "message": exception.message
+            }
+        }
 
 
 class Service(object):
@@ -133,8 +166,9 @@ class Service(object):
         validate_name(name)
         self.name = name
         self.operations = {}
-        self.app = bottle.Bottle()
-        self.metadata = {}
+        self.exceptions = {}
+        self._app = bottle.Bottle()
+        self._metadata = {}
 
     @classmethod
     def from_json(cls, data):
@@ -145,26 +179,48 @@ class Service(object):
         with open(filename) as f:
             return Service.from_json(json.loads(f.read()))
 
-    def register(self, name, operation):
+    def _register_operation(self, name, operation):
         if name in self.operations:
             raise KeyError(OP_ALREADY_REGISTERED.format(name))
         self.operations[name] = operation
 
+    def _register_exception(self, name, exception):
+        if name in self.exceptions:
+            raise KeyError(EX_ALREADY_REGISTERED.format(name))
+        self.exceptions[name] = exception
+
     def operation(self, name, **kwargs):
         '''Return a decorator that maps an operation name to a function'''
-        return lambda func: self.operations[name].wrap(func, **kwargs)
+        return lambda func: self.operations[name]._wrap(func, **kwargs)
 
     @property
-    def mapped(self):
+    def _mapped(self):
         '''True if all operations have been mapped'''
-        return all(op.mapped for op in six.itervalues(self.operations))
+        return all(op._mapped for op in six.itervalues(self.operations))
 
     @property
-    def config(self):
+    def _config(self):
         '''Keep config centralized in bottle app'''
-        return self.app.config
+        return self._app.config
 
     def run(self, **kwargs):
-        if not self.mapped:
+        # Fail closed - assume production
+        self._debug = kwargs.get("debug", False)
+        if not self._mapped:
             raise ValueError("Cannot run service without mapping all operations")
-        self.app.run(**kwargs)
+        self._app.run(**kwargs)
+
+class ServiceException(Exception):
+    '''Represents an error during Service operation'''
+    pass
+
+class ServerException(ServiceException):
+    '''The server did something wrong'''
+    default_message = "Internal Error"
+    def __init__(self, message=None, **kwargs):
+        message = message or ServerException.default_message
+        super(ServerException, self).__init__(message, **kwargs)
+
+class ClientException(ServiceException):
+    '''The client did something wrong'''
+    pass
