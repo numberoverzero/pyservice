@@ -1,6 +1,8 @@
 import os
 import json
 import pytest
+import webtest
+
 import pyservice
 
 j = json.loads
@@ -54,3 +56,19 @@ def test_decorated_function_returns_original():
     wrapped_func = service.operation("ConcatOperation")(concat)
     assert original_func is wrapped_func
     assert service.mapped
+
+def test_service_routing():
+    data = j('{"name": "ServiceName", "operations": [{"name":"ConcatOperation", "input": ["a", "b"], "output": ["ab"]}]}')
+    service = pyservice.Service("ServiceName")
+    pyservice.parse_service(service, data)
+
+    @service.operation("ConcatOperation")
+    def concat(a, b):
+        return a + b
+
+    app = webtest.TestApp(service.app)
+    input = {"a": "Hello", "b": "World"}
+    route = "/ServiceName/ConcatOperation"
+    expected = {"ab": "HelloWorld"}
+    response = app.post_json(route, input)
+    assert response.json == expected

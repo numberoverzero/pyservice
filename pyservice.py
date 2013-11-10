@@ -19,6 +19,7 @@ BAD_FUNC_SIGNATURE = "Invalid function signature: {}"
 
 
 class ServiceException(Exception):
+    '''Represents an error during Service operation'''
     pass
 
 def parse_name(data):
@@ -90,38 +91,33 @@ class Operation(object):
 
         @self.service.app.post(self.route)
         def handle():
-            # Build func args from request body
-            inp = self.build_input(bottle.request.json)
-
-            # Invoke function
-            out = self.func(*inp)
-
-            # Build return values into dict
-            return self.build_output(out)
+            input = self.build_input(bottle.request.json)
+            output = self.func(*input)
+            return self.build_output(output)
 
         # Return the function unchanged so that it can still be invoked normally
         return func
 
-    def build_input(self, inp):
-        if set(inp.keys()) != set(self.input):
+    def build_input(self, input):
+        if set(input.keys()) != set(self.input):
             msg = "Input {} does not match required input {}"
-            raise ServiceException(msg.format(inp.keys(), self.input))
+            raise ServiceException(msg.format(input.keys(), self.input))
         if self.func is None:
             raise ServiceException("No wrapped function to order input args by!")
-        return [inp[varname] for varname in self.func.__code__.co_varnames]
+        return [input[varname] for varname in self.func.__code__.co_varnames]
 
-    def build_output(self, out):
-        if len(out) != 1:
+    def build_output(self, output):
+        if len(output) != 1:
             # Check for string/unicode
-            is_string = isinstance(out, six.string_types)
-            is_text = isinstance(out, six.text_type)
+            is_string = isinstance(output, six.string_types)
+            is_text = isinstance(output, six.text_type)
             if is_string or is_text:
-                out = [out]
+                output = [output]
 
-        if len(out) != len(self.output):
+        if len(output) != len(self.output):
             msg = "Output {} does not match expected output format {}"
-            raise ServiceException(msg.format(out, self.output))
-        return {key: value for key, value in zip(self.output, out)}
+            raise ServiceException(msg.format(output, self.output))
+        return {key: value for key, value in zip(self.output, output)}
 
 
 class Service(object):
@@ -155,3 +151,13 @@ class Service(object):
     def mapped(self):
         '''True if all operations have been mapped'''
         return all(op.mapped for op in six.itervalues(self.operations))
+
+    @property
+    def config(self):
+        '''Keep config centralized in bottle app'''
+        return self.app.config
+
+    def run(self, **kwargs):
+        if not self.mapped:
+            raise ValueError("Cannot run service without mapping all operations")
+        self.app.run(**kwargs)
