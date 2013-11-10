@@ -211,6 +211,18 @@ class Service(object):
         '''Keep config centralized in bottle app'''
         return self._app.config
 
+    def raise_(self, name, message=''):
+        '''
+        Raise an exception registered with the service
+
+        If no exception with the given name is registered,
+        raises a generic ServerException
+        '''
+        exception = self.exceptions.get(name, None)
+        if not exception:
+            raise ServerException()
+        raise exception(message)
+
     def run(self, **kwargs):
         # Fail closed - assume production
         self._debug = kwargs.get("debug", False)

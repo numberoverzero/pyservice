@@ -45,6 +45,12 @@ def test_register_exception_twice():
     with pytest.raises(KeyError):
         service._register_exception("DummyException", DummyException)
 
+def test_reregister_builtin_exception():
+    service = pyservice.Service("ServiceName")
+    class DummyException(pyservice.ServiceException): pass
+    with pytest.raises(KeyError):
+        service._register_exception("ServiceException", DummyException)
+
 def test_basic_exceptions_registered():
     service = pyservice.Service("ServiceName")
     assert service.exceptions["ServiceException"] is pyservice.ServiceException
@@ -79,6 +85,26 @@ def test_run_without_mapping():
     assert not service._mapped
     with pytest.raises(ValueError):
         service.run()
+
+def test_raise_builtin_exception():
+    service = pyservice.Service("ServiceName")
+    with pytest.raises(pyservice.ClientException):
+        service.raise_("ClientException", "message")
+
+def test_raise_registered_exception():
+    service = pyservice.Service("ServiceName")
+    class MyException(Exception): pass
+    service._register_exception("MyException", MyException)
+
+    with pytest.raises(MyException):
+        service.raise_("MyException", "message")
+
+def test_raise_unknown_exception():
+    service = pyservice.Service("ServiceName")
+    class MyException(Exception): pass
+
+    with pytest.raises(pyservice.ServerException):
+        service.raise_("MyException", "message")
 
 def test_service_routing():
     data = j('{"name": "ServiceName", "operations": [{"name":"ConcatOperation", "input": ["a", "b"], "output": ["ab"]}]}')
