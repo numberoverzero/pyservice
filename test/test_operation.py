@@ -64,8 +64,7 @@ def test_wrap_too_many_args():
 def test_wrap_too_few_args():
     data = j('{"name":"CreateOperation", "input": ["a", "b"]}')
     service = pyservice.Service("ServiceName")
-    operation = pyservice.Operation(service, "CreateOperation")
-    pyservice.parse_operation(service, operation, data)
+    operation = pyservice.parse_operation(service, data)
 
     with pytest.raises(ValueError):
         def create(a): pass
@@ -74,8 +73,7 @@ def test_wrap_too_few_args():
 def test_wrap_arg_name_mismatch():
     data = j('{"name":"CreateOperation", "input": ["a", "b"]}')
     service = pyservice.Service("ServiceName")
-    operation = pyservice.Operation(service, "CreateOperation")
-    pyservice.parse_operation(service, operation, data)
+    operation = pyservice.parse_operation(service, data)
 
     with pytest.raises(ValueError):
         def create(alpha, beta): pass
@@ -84,8 +82,7 @@ def test_wrap_arg_name_mismatch():
 def test_wrap_no_input():
     data = j('{"name":"CreateOperation", "input": []}')
     service = pyservice.Service("ServiceName")
-    operation = pyservice.Operation(service, "CreateOperation")
-    pyservice.parse_operation(service, operation, data)
+    operation = pyservice.parse_operation(service, data)
 
     def create(): pass
     operation.wrap(create)
@@ -93,8 +90,7 @@ def test_wrap_no_input():
 def test_build_input_ordering():
     data = j('{"name":"CreateOperation", "input": ["a", "b", "c"]}')
     service = pyservice.Service("ServiceName")
-    operation = pyservice.Operation(service, "CreateOperation")
-    pyservice.parse_operation(service, operation, data)
+    operation = pyservice.parse_operation(service, data)
     operation.wrap(lambda a, b, c: None)
 
     # Explicitly pass args out of order to make sure
@@ -111,8 +107,7 @@ def test_build_input_ordering():
 def test_build_input_without_wrapping():
     data = j('{"name":"CreateOperation", "input": ["a", "b"]}')
     service = pyservice.Service("ServiceName")
-    operation = pyservice.Operation(service, "CreateOperation")
-    pyservice.parse_operation(service, operation, data)
+    operation = pyservice.parse_operation(service, data)
 
     inp = {
         "a": "Hello"
@@ -123,8 +118,7 @@ def test_build_input_without_wrapping():
 def test_build_input_no_args():
     data = j('{"name":"CreateOperation", "input": []}')
     service = pyservice.Service("ServiceName")
-    operation = pyservice.Operation(service, "CreateOperation")
-    pyservice.parse_operation(service, operation, data)
+    operation = pyservice.parse_operation(service, data)
     operation.wrap(lambda: None)
 
     inp = {}
@@ -134,8 +128,7 @@ def test_build_input_no_args():
 def test_build_input_too_few_args():
     data = j('{"name":"CreateOperation", "input": ["a", "b"]}')
     service = pyservice.Service("ServiceName")
-    operation = pyservice.Operation(service, "CreateOperation")
-    pyservice.parse_operation(service, operation, data)
+    operation = pyservice.parse_operation(service, data)
     operation.wrap(lambda a, b: None)
 
     inp = {
@@ -147,8 +140,7 @@ def test_build_input_too_few_args():
 def test_build_input_too_many_args():
     data = j('{"name":"CreateOperation", "input": ["a", "b"]}')
     service = pyservice.Service("ServiceName")
-    operation = pyservice.Operation(service, "CreateOperation")
-    pyservice.parse_operation(service, operation, data)
+    operation = pyservice.parse_operation(service, data)
     operation.wrap(lambda a, b: None)
 
     inp = {
@@ -162,8 +154,7 @@ def test_build_input_too_many_args():
 def test_build_input_wrong_args():
     data = j('{"name":"CreateOperation", "input": ["a", "b"]}')
     service = pyservice.Service("ServiceName")
-    operation = pyservice.Operation(service, "CreateOperation")
-    pyservice.parse_operation(service, operation, data)
+    operation = pyservice.parse_operation(service, data)
     operation.wrap(lambda a, b: None)
 
     inp = {
@@ -177,8 +168,7 @@ def test_build_input_wrong_args():
 def test_build_output_too_few_args():
     data = j('{"name":"CreateOperation", "output": ["a", "b"]}')
     service = pyservice.Service("ServiceName")
-    operation = pyservice.Operation(service, "CreateOperation")
-    pyservice.parse_operation(service, operation, data)
+    operation = pyservice.parse_operation(service, data)
 
     out = ["Hello"]
     with pytest.raises(pyservice.ServiceException):
@@ -187,8 +177,7 @@ def test_build_output_too_few_args():
 def test_build_output_too_many_args():
     data = j('{"name":"CreateOperation", "output": ["a", "b"]}')
     service = pyservice.Service("ServiceName")
-    operation = pyservice.Operation(service, "CreateOperation")
-    pyservice.parse_operation(service, operation, data)
+    operation = pyservice.parse_operation(service, data)
 
     out = ["Hello", "World", "!"]
     with pytest.raises(pyservice.ServiceException):
@@ -197,8 +186,7 @@ def test_build_output_too_many_args():
 def test_build_output_ordering():
     data = j('{"name":"CreateOperation", "output": ["a", "b"]}')
     service = pyservice.Service("ServiceName")
-    operation = pyservice.Operation(service, "CreateOperation")
-    pyservice.parse_operation(service, operation, data)
+    operation = pyservice.parse_operation(service, data)
 
     out = ["Hello", "World"]
     result = operation.build_output(out)
@@ -207,8 +195,7 @@ def test_build_output_ordering():
 def test_build_output_no_args():
     data = j('{"name":"CreateOperation", "output": []}')
     service = pyservice.Service("ServiceName")
-    operation = pyservice.Operation(service, "CreateOperation")
-    pyservice.parse_operation(service, operation, data)
+    operation = pyservice.parse_operation(service, data)
 
     out = []
     result = operation.build_output(out)
@@ -217,8 +204,7 @@ def test_build_output_no_args():
 def test_wrapped_func_returns_original():
     data = j('{"name":"ConcatOperation", "input": ["a", "b"], "output": ["ab"]}')
     service = pyservice.Service("ServiceName")
-    operation = pyservice.Operation(service, "ConcatOperation")
-    pyservice.parse_operation(service, operation, data)
+    operation = pyservice.parse_operation(service, data)
 
     def concat(a, b):
         return a + b

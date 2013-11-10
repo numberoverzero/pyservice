@@ -10,6 +10,7 @@ j = json.loads
 #For loading relative files
 here = os.path.dirname(os.path.realpath(__file__))
 
+
 def test_bad_json():
     not_json = "bad_json"
     with pytest.raises(TypeError):
@@ -36,8 +37,7 @@ def test_duplicate_register():
 
 def test_operation_decorator():
     data = j('{"name": "ServiceName", "operations": [{"name":"CreateOperation", "input": ["arg1"]}]}')
-    service = pyservice.Service("ServiceName")
-    pyservice.parse_service(service, data)
+    service = pyservice.parse_service(data)
 
     @service.operation("CreateOperation")
     def create(arg1): pass
@@ -46,8 +46,7 @@ def test_operation_decorator():
 
 def test_decorated_function_returns_original():
     data = j('{"name": "ServiceName", "operations": [{"name":"ConcatOperation", "input": ["a", "b"], "output": ["ab"]}]}')
-    service = pyservice.Service("ServiceName")
-    pyservice.parse_service(service, data)
+    service = pyservice.parse_service(data)
 
     def concat(a, b):
         return a + b
@@ -59,16 +58,16 @@ def test_decorated_function_returns_original():
 
 def test_service_routing():
     data = j('{"name": "ServiceName", "operations": [{"name":"ConcatOperation", "input": ["a", "b"], "output": ["ab"]}]}')
-    service = pyservice.Service("ServiceName")
-    pyservice.parse_service(service, data)
+    service = pyservice.parse_service(data)
 
     @service.operation("ConcatOperation")
     def concat(a, b):
         return a + b
 
-    app = webtest.TestApp(service.app)
     input = {"a": "Hello", "b": "World"}
     route = "/ServiceName/ConcatOperation"
-    expected = {"ab": "HelloWorld"}
+
+    app = webtest.TestApp(service.app)
     response = app.post_json(route, input)
-    assert response.json == expected
+
+    assert response.json == {"ab": "HelloWorld"}

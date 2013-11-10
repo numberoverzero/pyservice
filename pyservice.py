@@ -25,8 +25,8 @@ class ServiceException(Exception):
 def parse_name(data):
     return data["name"]
 
-def parse_operation(service, operation, data):
-    # Load opration input/output
+def parse_operation(service, data):
+    operation = Operation(service, parse_name(data))
     operation.input = data.get("input", [])
     operation.output = data.get("output", [])
     # Dump extra fields in metadta
@@ -35,12 +35,11 @@ def parse_operation(service, operation, data):
             operation.metadata[key] = data[key]
     return operation
 
-def parse_service(service, data):
-    # Load up operations
+def parse_service(data):
+    service = Service(parse_name(data))
     for opdata in data.get("operations", []):
         name = parse_name(opdata)
-        operation = Operation(service, name)
-        parse_operation(service, operation, opdata)
+        parse_operation(service, opdata)
     # Dump extra fields in metadta
     for key in data:
         if key not in RESERVED_SERVICE_KEYS:
@@ -129,9 +128,7 @@ class Service(object):
 
     @classmethod
     def from_json(cls, data):
-        name = parse_name(data)
-        service = Service(name)
-        return parse_service(service, data)
+        return parse_service(data)
 
     @classmethod
     def from_file(cls, filename):
