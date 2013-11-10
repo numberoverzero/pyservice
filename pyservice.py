@@ -170,6 +170,14 @@ class Service(object):
         self._app = bottle.Bottle()
         self._metadata = {}
 
+        _base_exceptions = [
+            ("ServiceException", ServiceException),
+            ("ServerException", ServerException),
+            ("ClientException", ClientException)
+        ]
+        for name, exception in _base_exceptions:
+            self._register_exception(name, exception)
+
     @classmethod
     def from_json(cls, data):
         return parse_service(data)

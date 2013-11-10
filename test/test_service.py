@@ -45,6 +45,12 @@ def test_register_exception_twice():
     with pytest.raises(KeyError):
         service._register_exception("DummyException", DummyException)
 
+def test_basic_exceptions_registered():
+    service = pyservice.Service("ServiceName")
+    assert service.exceptions["ServiceException"] is pyservice.ServiceException
+    assert service.exceptions["ServerException"] is pyservice.ServerException
+    assert service.exceptions["ClientException"] is pyservice.ClientException
+
 def test_operation_decorator():
     data = j('{"name": "ServiceName", "operations": [{"name":"CreateOperation", "input": ["arg1"]}]}')
     service = pyservice.parse_service(data)
