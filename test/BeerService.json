@@ -10,7 +10,7 @@
       "name": "get_beer",
       "input": ["name"],
       "output": ["quantity", "price", "description"],
-      "raises": ["BeerNotFound"]
+      "exceptions": ["BeerDoesNotExist"]
     },
 
     {
@@ -20,7 +20,22 @@
         "beers",
         "total",
         "continuation_token"
-      ]
+      ],
+      "exceptions": ["InvalidContinuationToken"]
+    }
+  ],
+  "exceptions": [
+    {
+      "name": "BeerDoesNotExist",
+      "type": "ClientException"
+    },
+    {
+      "name": "InvalidContinuationToken",
+      "type": "ClientException"
+    },
+    {
+      "name": "RetryableException",
+      "type": "ServerException"
     }
   ]
 }
