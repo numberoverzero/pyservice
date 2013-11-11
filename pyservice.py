@@ -197,9 +197,37 @@ class Service(object):
             raise KeyError(EX_ALREADY_REGISTERED.format(name))
         self.exceptions[name] = exception_cls
 
-    def operation(self, name, **kwargs):
-        '''Return a decorator that maps an operation name to a function'''
-        return lambda func: self.operations[name]._wrap(func, **kwargs)
+    def operation(self, name=None, func=None, **kwargs):
+        '''
+        Return a decorator that maps an operation name to a function
+
+        Both of the following are acceptable, and map to the operation "my_op":
+
+        @service.operation("my_op")
+        def func(arg):
+            pass
+
+        @service.operation
+        def my_op(arg):
+            pass
+        '''
+
+        # Direct call
+        if not callable(name) and callable(func):
+            return self.operations[name]._wrap(func, **kwargs)
+
+        # @service.operation("name")
+        elif not callable(name) and func is None:
+            # we need to return a function that takes a function and returns a function
+            return lambda func: self.operations[name]._wrap(func, **kwargs)
+
+        # @service
+        # def name(arg):
+        elif callable(name):
+            # infer name from function
+            func = name
+            name = func.__name__
+            return self.operations[name]._wrap(func, **kwargs)
 
     @property
     def _mapped(self):

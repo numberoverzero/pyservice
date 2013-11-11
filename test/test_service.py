@@ -57,12 +57,30 @@ def test_basic_exceptions_registered():
     assert service.exceptions["ServerException"] is pyservice.ServerException
     assert service.exceptions["ClientException"] is pyservice.ClientException
 
-def test_operation_decorator():
+def test_full_operation_decorator():
     data = j('{"name": "ServiceName", "operations": [{"name":"CreateOperation", "input": ["arg1"]}]}')
     service = pyservice.parse_service(data)
 
     @service.operation("CreateOperation")
     def create(arg1): pass
+
+    assert service._mapped
+
+def test_partial_operation_decorator():
+    data = j('{"name": "ServiceName", "operations": [{"name":"create", "input": ["arg1"]}]}')
+    service = pyservice.parse_service(data)
+
+    @service.operation
+    def create(arg1): pass
+
+    assert service._mapped
+
+def test_direct_call_operation_decorator():
+    data = j('{"name": "ServiceName", "operations": [{"name":"CreateOperation", "input": ["arg1"]}]}')
+    service = pyservice.parse_service(data)
+    def create(arg1): pass
+
+    service.operation("CreateOperation", create)
 
     assert service._mapped
 
