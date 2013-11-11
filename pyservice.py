@@ -175,8 +175,8 @@ class Service(object):
             ("ServerException", ServerException),
             ("ClientException", ClientException)
         ]
-        for name, exception in _base_exceptions:
-            self._register_exception(name, exception)
+        for name, exception_cls in _base_exceptions:
+            self._register_exception(name, exception_cls)
 
     @classmethod
     def from_json(cls, data):
@@ -192,10 +192,10 @@ class Service(object):
             raise KeyError(OP_ALREADY_REGISTERED.format(name))
         self.operations[name] = operation
 
-    def _register_exception(self, name, exception):
+    def _register_exception(self, name, exception_cls):
         if name in self.exceptions:
             raise KeyError(EX_ALREADY_REGISTERED.format(name))
-        self.exceptions[name] = exception
+        self.exceptions[name] = exception_cls
 
     def operation(self, name, **kwargs):
         '''Return a decorator that maps an operation name to a function'''
