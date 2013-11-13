@@ -4,6 +4,12 @@ import json
 import bottle
 import functools
 
+EVENTS = [
+    "on_input",
+    "on_output",
+    "on_exception"
+]
+
 RESERVED_SERVICE_KEYS = [
     "name",
     "operations",
@@ -208,22 +214,22 @@ class Service(object):
             pass
         '''
 
-        # Direct call
-        if not callable(name) and callable(func):
-            return self.operations[name]._wrap(func, **kwargs)
-
-        # @service.operation("name")
-        elif not callable(name) and func is None:
-            # we need to return a function that takes a function and returns a function
-            return lambda func: self.operations[name]._wrap(func, **kwargs)
+        wrap = lambda func: self.operations[name]._wrap(func, **kwargs)
 
         # @service
         # def name(arg):
-        elif callable(name):
-            # infer name from function
-            func = name
+        if callable(name):
+            func, name = name, name.__name__
             name = func.__name__
-            return self.operations[name]._wrap(func, **kwargs)
+
+        # service.operation("name", operation)
+        if callable(func):
+            return wrap(func)
+
+        # @service.operation("name")
+        else:
+            # we need to return a decorator, since we don't have the function to decorate yet
+            return wrap
 
     @property
     def _mapped(self):
