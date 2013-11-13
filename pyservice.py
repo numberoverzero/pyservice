@@ -11,19 +11,19 @@ EVENTS = [
 ]
 
 RESERVED_SERVICE_KEYS = [
-    "name",
-    "operations",
     "exceptions",
+    "name",
     "operation",
+    "operations",
     "raise_",
-    "run"
+    "run",
 ]
 
 RESERVED_OPERATION_KEYS = [
-    "name",
-    "input",
-    "output",
     "exceptions",
+    "input",
+    "name",
+    "output",
 ]
 
 OP_ALREADY_MAPPED = "Route has already been created for operation {}"
@@ -69,6 +69,31 @@ def parse_service(data):
     parse_metadata(service, data, RESERVED_SERVICE_KEYS)
     return service
 
+def handle_request(service, operation, func):
+    context = {
+        "input": bottle.request.json,
+        "service": service,
+        "operation": operation
+    }
+    try:
+        # Set up input args
+        service._invoke_event("on_input", context)
+        data = context["input"]
+        args = [data[argname] for argname in operation._argnames]
+
+        context["result"] = func(*args)
+        context["output"] = {}
+        service._invoke_event("on_output", context)
+
+        # Return built up json
+        return context["output"]
+
+    except Exception as e:
+        context["_e"] = e
+        context["exception"] = {}
+        service._invoke_event("on_exception", context)
+        return context["exception"]
+
 
 class Operation(object):
     def __init__(self, service, name):
@@ -93,6 +118,10 @@ class Operation(object):
         '''True if this operation has been mapped to a function, including bottle routing'''
         return bool(self._func)
 
+    @property
+    def _argnames(self):
+        return self._func.__code__.co_varnames
+
     def _wrap(self, func, **kwargs):
         if self._func:
             raise ValueError(OP_ALREADY_MAPPED.format(self.name))
@@ -111,74 +140,40 @@ class Operation(object):
 
         self._func = func
 
-        @self._service._app.post(self._route)
-        def handle():
-            try:
-                input = self._build_input(bottle.request.json)
-                output = self._func(*input)
-                return self._build_output(output)
-            # Don't catch bottle exceptions, such as HTTPError
-            # Otherwise stack traces during debugging are lost
-            except bottle.BottleException:
-                raise
-            except Exception as e:
-                return build_exception(e)
-
+        handler = lambda: handle_request(self._service, self, func)
+        self._service._app.post(self._route)(handler)
         # Return the function unchanged so that it can still be invoked normally
         return func
 
-    def _build_input(self, input):
-        if set(input.keys()) != set(self.input):
-            msg = "Input {} does not match required input {}"
-            raise ClientException(msg.format(input.keys(), self.input))
-        if self._func is None:
-            raise ServerException("No wrapped function to order input args by!")
-        return [input[varname] for varname in self._func.__code__.co_varnames]
-
-    def _build_output(self, output):
-        if len(output) != 1:
-            # Check for string/unicode
-            is_string = isinstance(output, six.string_types)
-            is_text = isinstance(output, six.text_type)
-            if is_string or is_text:
-                output = [output]
-
-        if len(output) != len(self.output):
-            msg = "Output {} does not match expected output format {}"
-            raise ServerException(msg.format(output, self.output))
-        return {key: value for key, value in zip(self.output, output)}
-
-    def _build_exception(self, exception):
-        # Whitelist on registered service exceptions
-        # anything else gets a general "Exception" and dummy message
-        whitelisted = exception.__class__ in self._service.exceptions
-        debugging = self._service.debug
-        if not whitelisted and not debugging:
-            exception = ServerException()
-
-        return {
-            "_exception": {
-                "cls": exception.__class__,
-                "message": exception.message
-            }
-        }
-
 
 class Service(object):
-    def __init__(self, name):
+    def __init__(self, name, **kwargs):
         validate_name(name)
         self.name = name
         self.operations = {}
         self.exceptions = {}
         self._app = bottle.Bottle()
+        self._handlers = {event:[] for event in EVENTS}
 
+        # Exceptions
+        register_base_exceptions = kwargs.pop("use_base_exceptions", True)
         _base_exceptions = [
             ("ServiceException", ServiceException),
             ("ServerException", ServerException),
             ("ClientException", ClientException)
         ]
-        for name, exception_cls in _base_exceptions:
-            self._register_exception(name, exception_cls)
+        if register_base_exceptions:
+            for name, exception_cls in _base_exceptions:
+                self._register_exception(name, exception_cls)
+
+        # Layer
+        register_base_layer = kwargs.pop("use_base_layer", True)
+        _base_layer = [
+            BasicValidationLayer
+        ]
+        if register_base_layer:
+            for layer in _base_layer:
+                layer(self, **kwargs)
 
     @classmethod
     def from_json(cls, data):
@@ -199,6 +194,33 @@ class Service(object):
             raise KeyError(EX_ALREADY_REGISTERED.format(name))
         self.exceptions[name] = exception_cls
 
+    def _register_layer(self, layer):
+        for event in EVENTS:
+            handler = getattr(layer, event, None)
+            if handler:
+                self._handlers[event].append(handler)
+
+    def _invoke_event(self, event, context):
+        '''
+        Sample request invocation:
+            Logging.on_input ----> Caching.on_input ----> Service.on_input ----> |
+                                                                                 |
+            Logging.on_output <--- Session.on_output <--- Service.on_output <-- <-
+
+        In the sample above Logging was added last.  To accomplish the ordering above,
+            walk input handlers in reverse, and output/exception handlers forward
+        '''
+
+        handlers = self._handlers.get(event, None)
+        if handlers is None:
+            raise ServerException("Unknown event {} invoked.".format(event))
+
+        if event == "on_input":
+            handlers = reversed(handlers)
+
+        for handler in handlers:
+            handler(context)
+
     def operation(self, name=None, func=None, **kwargs):
         '''
         Return a decorator that maps an operation name to a function
@@ -213,7 +235,6 @@ class Service(object):
         def my_op(arg):
             pass
         '''
-
         wrap = lambda func: self.operations[name]._wrap(func, **kwargs)
 
         # @service
@@ -260,6 +281,7 @@ class Service(object):
             raise ValueError("Cannot run service without mapping all operations")
         self._app.run(**kwargs)
 
+
 class ServiceException(Exception):
     '''Represents an error during Service operation'''
     pass
@@ -274,3 +296,66 @@ class ServerException(ServiceException):
 class ClientException(ServiceException):
     '''The client did something wrong'''
     pass
+
+class Layer(object):
+    def __init__(self, service=None, **kwargs):
+        if service:
+            service._register_layer(self)
+
+class BasicValidationLayer(Layer):
+    def on_input(self, context):
+        json_input = context["input"]
+        op_args = context["operation"].input
+        if set(json_input.keys()) != set(op_args):
+            msg = "Input {} does not match required input {}"
+            raise ClientException(msg.format(json_input.keys(), op_args))
+        if context["operation"]._func is None:
+            raise ServerException("No wrapped function to order input args by!")
+
+    def on_output(self, context):
+        func_result = context["result"]
+        json_output = context["output"]
+        expected_result = context["operation"].output
+
+        msg = "Output {} does not match expected output format {}"
+        exception = ServerException(msg.format(func_result, expected_result))
+
+        # No output expected
+        if len(expected_result) == 0:
+            if func_result is not None:
+                raise exception
+            else:
+                return
+
+        # One value - optimistically assume that even if
+        # something has an __iter__ method, it
+        # represents one value (such as strings)
+        if len(expected_result) == 1:
+            json_output[expected_result[0]] = func_result
+
+        # Multiple values - verify length and map
+        # expected_result keys to func_result values
+        else:
+            if len(expected_result) != len(func_result):
+                raise exception
+            for key, value in zip(expected_result, func_result):
+                func_result[key] = value
+
+    def on_exception(self, context):
+        # Whitelist on registered service exceptions
+        # anything else gets a general "Exception" and dummy message
+        _e = context["_e"]
+        whitelisted_exceptions = context["service"].exceptions
+        whitelisted = _e.__class__ in whitelisted_exceptions
+        debugging = context["service"]._debug
+
+        if not whitelisted and not debugging:
+            # Blow away the exception
+            _e = context["_e"] = ServerException()
+
+        context["exception"] = {
+            "_exception": {
+                "cls": _e.__class__.__name__,
+                "message": _e.message
+            }
+        }
