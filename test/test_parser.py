@@ -84,3 +84,9 @@ def test_parse_service_extra_fields_blacklist():
     data = j('{"name": "ServiceName", "run": "INVALID"}')
     service = pyservice.parse_service(data)
     assert service.run != "INVALID"
+
+def test_parse_operation_extra_fields_bad_name():
+    data = j('{"name": "CreateOperation", "_bad_key": "INVALID"}')
+    service = pyservice.Service("ServiceName")
+    with pytest.raises(ValueError):
+        pyservice.parse_operation(service, data)
