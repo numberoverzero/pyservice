@@ -8,7 +8,6 @@ RESERVED_SERVICE_KEYS = [
     "name",
     "operations",
     "exceptions",
-    "metadata",
     "operation",
     "raise_",
     "run"
@@ -19,7 +18,6 @@ RESERVED_OPERATION_KEYS = [
     "input",
     "output",
     "exceptions",
-    "metadata"
 ]
 
 OP_ALREADY_MAPPED = "Route has already been created for operation {}"
@@ -41,17 +39,20 @@ def parse_name(data):
     validate_name(name)
     return name
 
+def parse_metadata(obj, data, blacklist):
+    for key, value in six.iteritems(data):
+        validate_name(key)
+        if key not in blacklist:
+            setattr(obj, key, value)
+
 def parse_operation(service, data):
     operation = Operation(service, parse_name(data))
     for attr in ["input", "output", "exceptions"]:
         value = data.get(attr, [])
-        # Validate all fields are valid
+        # Validate all fields
         map(validate_name, value)
         setattr(operation, attr, value)
-    # Dump extra fields in metadta
-    for key in data:
-        if key not in RESERVED_OPERATION_KEYS:
-            operation._metadata[key] = data[key]
+    parse_metadata(operation, data, RESERVED_OPERATION_KEYS)
     return operation
 
 def parse_service(data):
@@ -59,10 +60,7 @@ def parse_service(data):
     for opdata in data.get("operations", []):
         name = parse_name(opdata)
         parse_operation(service, opdata)
-    # Dump extra fields in metadta
-    for key in data:
-        if key not in RESERVED_SERVICE_KEYS:
-            service._metadata[key] = data[key]
+    parse_metadata(service, data, RESERVED_SERVICE_KEYS)
     return service
 
 
@@ -75,7 +73,6 @@ class Operation(object):
 
         self.input = []
         self.output = []
-        self._metadata = {}
         self._func = None
 
         # Build bottle route
@@ -168,7 +165,6 @@ class Service(object):
         self.operations = {}
         self.exceptions = {}
         self._app = bottle.Bottle()
-        self._metadata = {}
 
         _base_exceptions = [
             ("ServiceException", ServiceException),

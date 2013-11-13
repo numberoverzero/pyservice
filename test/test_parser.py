@@ -66,16 +66,21 @@ def test_parse_basic_operation():
     assert set(operation.input) == set(["in1", "in2", "in3"])
     assert set(operation.output) == set(["out1", "out2"])
 
-def test_parse_service_metadata():
+def test_parse_service_extra_fields():
     data = j('{"name": "ServiceName", "foo": ["bar"]}')
     service = pyservice.parse_service(data)
-    assert "foo" in service._metadata
-    assert service._metadata["foo"] == ["bar"]
+    assert hasattr(service, "foo")
+    assert service.foo == ["bar"]
 
-def test_parse_operation_metadata():
+def test_parse_operation_extra_fields():
     data = j('{"name": "CreateOperation", "foo": ["bar"]}')
     service = pyservice.Service("ServiceName")
     operation = pyservice.parse_operation(service, data)
-    assert not service._metadata
-    assert "foo" in operation._metadata
-    assert operation._metadata["foo"] == ["bar"]
+    assert not hasattr(service, "foo")
+    assert hasattr(operation, "foo")
+    assert operation.foo == ["bar"]
+
+def test_parse_service_extra_fields_blacklist():
+    data = j('{"name": "ServiceName", "run": "INVALID"}')
+    service = pyservice.parse_service(data)
+    assert service.run != "INVALID"
