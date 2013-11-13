@@ -1,6 +1,5 @@
 import json
 import pytest
-import collections
 
 import pyservice
 
@@ -91,120 +90,6 @@ def test_wrap_no_input():
 
     def create(): pass
     operation._wrap(create)
-
-def test_build_input_ordering():
-    data = j('{"name":"CreateOperation", "input": ["a", "b", "c"]}')
-    service = pyservice.Service("ServiceName")
-    operation = pyservice.parse_operation(service, data)
-    operation._wrap(lambda a, b, c: None)
-
-    # Explicitly pass args out of order to make sure
-    # we're not taking advantage of dict hashing
-    # when iterating keys to build args
-    inp = collections.OrderedDict([
-        ("b", "World"),
-        ("c", "!"),
-        ("a", "Hello")
-    ])
-    args = operation._build_input(inp)
-    assert args == ["Hello", "World", "!"]
-
-def test_build_input_without_wrapping():
-    data = j('{"name":"CreateOperation", "input": ["a", "b"]}')
-    service = pyservice.Service("ServiceName")
-    operation = pyservice.parse_operation(service, data)
-
-    inp = {
-        "a": "Hello"
-    }
-    with pytest.raises(pyservice.ClientException):
-        operation._build_input(inp)
-
-def test_build_input_no_args():
-    data = j('{"name":"CreateOperation", "input": []}')
-    service = pyservice.Service("ServiceName")
-    operation = pyservice.parse_operation(service, data)
-    operation._wrap(lambda: None)
-
-    inp = {}
-    args = operation._build_input(inp)
-    assert args == []
-
-def test_build_input_too_few_args():
-    data = j('{"name":"CreateOperation", "input": ["a", "b"]}')
-    service = pyservice.Service("ServiceName")
-    operation = pyservice.parse_operation(service, data)
-    operation._wrap(lambda a, b: None)
-
-    inp = {
-        "a": "Hello"
-    }
-    with pytest.raises(pyservice.ClientException):
-        operation._build_input(inp)
-
-def test_build_input_too_many_args():
-    data = j('{"name":"CreateOperation", "input": ["a", "b"]}')
-    service = pyservice.Service("ServiceName")
-    operation = pyservice.parse_operation(service, data)
-    operation._wrap(lambda a, b: None)
-
-    inp = {
-        "a": "Hello",
-        "b": "World",
-        "c": "!"
-    }
-    with pytest.raises(pyservice.ClientException):
-        operation._build_input(inp)
-
-def test_build_input_wrong_args():
-    data = j('{"name":"CreateOperation", "input": ["a", "b"]}')
-    service = pyservice.Service("ServiceName")
-    operation = pyservice.parse_operation(service, data)
-    operation._wrap(lambda a, b: None)
-
-    inp = {
-        "wrong": "Hello",
-        "keys": "World",
-    }
-    with pytest.raises(pyservice.ClientException):
-        operation._build_input(inp)
-
-
-def test_build_output_too_few_args():
-    data = j('{"name":"CreateOperation", "output": ["a", "b"]}')
-    service = pyservice.Service("ServiceName")
-    operation = pyservice.parse_operation(service, data)
-
-    out = ["Hello"]
-    with pytest.raises(pyservice.ServerException):
-        operation._build_output(out)
-
-def test_build_output_too_many_args():
-    data = j('{"name":"CreateOperation", "output": ["a", "b"]}')
-    service = pyservice.Service("ServiceName")
-    operation = pyservice.parse_operation(service, data)
-
-    out = ["Hello", "World", "!"]
-    with pytest.raises(pyservice.ServerException):
-        operation._build_output(out)
-
-def test_build_output_ordering():
-    data = j('{"name":"CreateOperation", "output": ["a", "b"]}')
-    service = pyservice.Service("ServiceName")
-    operation = pyservice.parse_operation(service, data)
-
-    out = ["Hello", "World"]
-    result = operation._build_output(out)
-    assert result == {"a": "Hello", "b": "World"}
-
-def test_build_output_no_args():
-    data = j('{"name":"CreateOperation", "output": []}')
-    service = pyservice.Service("ServiceName")
-    operation = pyservice.parse_operation(service, data)
-
-    out = []
-    result = operation._build_output(out)
-    assert result == {}
 
 def test_wrapped_func_returns_original():
     data = j('{"name":"ConcatOperation", "input": ["a", "b"], "output": ["ab"]}')
