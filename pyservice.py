@@ -40,6 +40,57 @@ def validate_name(name):
     if not NAME_RE.search(name):
         raise ValueError("Invalid name: '{}'".format(name))
 
+def validate_input(context):
+    '''Make sure input has at least the required fields for mapping to a function'''
+    json_input = set(context["input"])
+    op_args = set(context["operation"].input)
+    if not json_input.issuperset(op_args):
+        msg = 'Input "{}" does not contain required params "{}"'
+        raise ClientException(msg.format(context["input"], op_args))
+    if context["operation"]._func is None:
+        raise ServerException("No wrapped function to order input args by!")
+
+def validate_output(context):
+    '''Make sure the expected fields are present in the output'''
+    json_output = set(context["output"])
+    op_returns = set(context["operation"].output)
+    if not json_output.issuperset(op_returns):
+        msg = 'Output "{}" does not contain required values "{}"'
+        raise ServerException(msg.format(context["output"], op_returns))
+
+def validate_exception(context):
+    '''Make sure the exception returned is whitelisted - otherwise throw a generic InteralException'''
+    _e = context["_e"]
+    whitelisted_exceptions = context["service"].exceptions
+    whitelisted = _e.__class__ in whitelisted_exceptions
+    debugging = context["service"]._debug
+
+    if not whitelisted and not debugging:
+        # Blow away the exception
+        _e = context["_e"] = ServerException()
+
+def map_output(result, context):
+    '''
+    Using the operation's description, map result fields to
+    context["output"]
+    '''
+    output_keys = context["operation"].output
+
+    # No output expected
+    if len(output_keys) == 0:
+        return
+
+    # One value - assume that even objs with an __iter__
+    # method represent one value (such as strings)
+    if len(output_keys) == 1:
+        result = [result]
+
+    # Multiple values
+    # We don't raise on unequal lengths, in case there's some
+    # weird post-processing going on
+    for key, value in zip(output_keys, result):
+        context["output"][key] = value
+
 def parse_name(data):
     name = data["name"]
     validate_name(name)
@@ -72,27 +123,39 @@ def parse_service(data):
 def handle_request(service, operation, func):
     context = {
         "input": bottle.request.json,
+        "output": {},
         "service": service,
         "operation": operation
     }
     try:
-        # Set up input args
         service._invoke_event("on_input", context)
+        validate_input(context)
         data = context["input"]
         args = [data[argname] for argname in operation._argnames]
 
-        context["result"] = func(*args)
-        context["output"] = {}
-        service._invoke_event("on_output", context)
+        result = func(*args)
+        map_output(result, context)
 
-        # Return built up json
+        service._invoke_event("on_output", context)
+        validate_output(context)
         return context["output"]
 
-    except Exception as e:
-        context["_e"] = e
-        context["exception"] = {}
-        service._invoke_event("on_exception", context)
+    except Exception as exception:
+        handle_exception(context, exception, invoke_event=True)
+        validate_exception(context)
         return context["exception"]
+
+def handle_exception(context, exception, invoke_event=False):
+    '''Handle an exception, optionally invoking a service event'''
+    context["_e"] = exception
+    context["exception"] = {}
+    # When a Layer throws while handling an exception,
+    #   re-handle_exception and don't invoke an event
+    if invoke_event:
+        try:
+            service._invoke_event("on_exception", context)
+        except Exception as e:
+            handle_exception(context, e, invoke_event=False)
 
 
 class Operation(object):
@@ -165,15 +228,6 @@ class Service(object):
         if register_base_exceptions:
             for name, exception_cls in _base_exceptions:
                 self._register_exception(name, exception_cls)
-
-        # Layer
-        register_base_layer = kwargs.pop("use_base_layer", True)
-        _base_layer = [
-            BasicValidationLayer
-        ]
-        if register_base_layer:
-            for layer in _base_layer:
-                layer(self, **kwargs)
 
     @classmethod
     def from_json(cls, data):
@@ -301,61 +355,3 @@ class Layer(object):
     def __init__(self, service=None, **kwargs):
         if service:
             service._register_layer(self)
-
-class BasicValidationLayer(Layer):
-    def on_input(self, context):
-        json_input = context["input"]
-        op_args = context["operation"].input
-        if set(json_input.keys()) != set(op_args):
-            msg = "Input {} does not match required input {}"
-            raise ClientException(msg.format(json_input.keys(), op_args))
-        if context["operation"]._func is None:
-            raise ServerException("No wrapped function to order input args by!")
-
-    def on_output(self, context):
-        func_result = context["result"]
-        json_output = context["output"]
-        expected_result = context["operation"].output
-
-        msg = "Output {} does not match expected output format {}"
-        exception = ServerException(msg.format(func_result, expected_result))
-
-        # No output expected
-        if len(expected_result) == 0:
-            if func_result is not None:
-                raise exception
-            else:
-                return
-
-        # One value - optimistically assume that even if
-        # something has an __iter__ method, it
-        # represents one value (such as strings)
-        if len(expected_result) == 1:
-            json_output[expected_result[0]] = func_result
-
-        # Multiple values - verify length and map
-        # expected_result keys to func_result values
-        else:
-            if len(expected_result) != len(func_result):
-                raise exception
-            for key, value in zip(expected_result, func_result):
-                func_result[key] = value
-
-    def on_exception(self, context):
-        # Whitelist on registered service exceptions
-        # anything else gets a general "Exception" and dummy message
-        _e = context["_e"]
-        whitelisted_exceptions = context["service"].exceptions
-        whitelisted = _e.__class__ in whitelisted_exceptions
-        debugging = context["service"]._debug
-
-        if not whitelisted and not debugging:
-            # Blow away the exception
-            _e = context["_e"] = ServerException()
-
-        context["exception"] = {
-            "_exception": {
-                "cls": _e.__class__.__name__,
-                "message": _e.message
-            }
-        }
