@@ -2,13 +2,6 @@ import re
 import six
 import json
 import bottle
-import functools
-
-EVENTS = [
-    "on_input",
-    "on_output",
-    "on_exception"
-]
 
 RESERVED_SERVICE_KEYS = [
     "exceptions",
@@ -60,14 +53,14 @@ def validate_output(context):
 
 def validate_exception(context):
     '''Make sure the exception returned is whitelisted - otherwise throw a generic InteralException'''
-    _e = context["_e"]
+    exception = context["exception"]
     whitelisted_exceptions = context["service"].exceptions
-    whitelisted = _e.__class__ in whitelisted_exceptions
+    whitelisted = exception.__class__ in whitelisted_exceptions
     debugging = context["service"]._debug
 
     if not whitelisted and not debugging:
         # Blow away the exception
-        _e = context["_e"] = ServerException()
+        context["exception"] = ServerException()
 
 def map_output(result, context):
     '''
@@ -119,7 +112,6 @@ def parse_operation(service, data):
 def parse_service(data):
     service = Service(parse_name(data))
     for opdata in data.get("operations", []):
-        name = parse_name(opdata)
         parse_operation(service, opdata)
     parse_metadata(service, data, RESERVED_SERVICE_KEYS)
     return service
@@ -128,39 +120,26 @@ def handle_request(service, operation, func, input):
     context = {
         "input": input,
         "output": {},
-        "exception": {},
         "service": service,
         "operation": operation
     }
     try:
-        service._invoke_event("on_input", context)
-        validate_input(context)
-        data = context["input"]
-        args = [data[argname] for argname in operation._argnames]
+        # Set up layers, including real execution pseudo-layer
+        stack = service._stack
+        stack.append(FunctionExecutor(operation, func))
+        stack.handle_request(context)
 
-        result = func(*args)
-        map_output(result, context)
-
-        service._invoke_event("on_output", context)
         validate_output(context)
         return context["output"]
 
     except Exception as exception:
-        handle_exception(context, exception, invoke_event=True)
+        context["exception"] = exception
         validate_exception(context)
-        return context["exception"]
-
-def handle_exception(context, exception, invoke_event=False):
-    '''Handle an exception, optionally invoking a service event'''
-    context["_e"] = exception
-    context["exception"] = {}
-    # When a Layer throws while handling an exception,
-    #   re-handle_exception and don't invoke an event
-    if invoke_event:
-        try:
-            service._invoke_event("on_exception", context)
-        except Exception as e:
-            handle_exception(context, e, invoke_event=False)
+        exception = context["exception"]
+        return {
+            '_e': exception.__class__,
+            'msg': exception.message
+        }
 
 
 class Operation(object):
@@ -221,7 +200,7 @@ class Service(object):
         self.operations = {}
         self.exceptions = {}
         self._app = bottle.Bottle()
-        self._handlers = {event:[] for event in EVENTS}
+        self._layers = []
         self._debug = False
 
         # Exceptions
@@ -255,31 +234,11 @@ class Service(object):
         self.exceptions[name] = exception_cls
 
     def _register_layer(self, layer):
-        for event in EVENTS:
-            handler = getattr(layer, event, None)
-            if handler:
-                self._handlers[event].append(handler)
+        self._layers.append(layer)
 
-    def _invoke_event(self, event, context):
-        '''
-        Sample request invocation:
-            Logging.on_input ----> Caching.on_input ----> Service.on_input ----> |
-                                                                                 |
-            Logging.on_output <--- Session.on_output <--- Service.on_output <-- <-
-
-        In the sample above Logging was added last.  To accomplish the ordering above,
-            walk input handlers in reverse, and output/exception handlers forward
-        '''
-
-        handlers = self._handlers.get(event, None)
-        if handlers is None:
-            raise ServerException("Unknown event {} invoked.".format(event))
-
-        if event == "on_input":
-            handlers = reversed(handlers)
-
-        for handler in handlers:
-            handler(context)
+    @property
+    def _stack(self):
+        return Stack(self._layers[:])
 
     def operation(self, name=None, func=None, **kwargs):
         '''
@@ -369,6 +328,7 @@ class Layer(object):
 
         # Do some post-request work
 
+
 class Stack(object):
     def __init__(self, layers=None):
         self.layers = layers or []
@@ -387,3 +347,19 @@ class Stack(object):
         layer = self.layers[self.index]
         self.index += 1
         layer.handle_request(context, self)
+
+
+class FunctionExecutor(object):
+    def __init__(self, operation, func):
+        self.operation = operation
+        self.func = func
+
+    def handle_request(self, context, next):
+        validate_input(context)
+        data = context["input"]
+        args = [data[argname] for argname in self.operation._argnames]
+
+        result = self.func(*args)
+        map_output(result, context)
+        next.handle_request(context)
+
