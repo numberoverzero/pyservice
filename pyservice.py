@@ -103,12 +103,16 @@ def parse_metadata(obj, data, blacklist):
             setattr(obj, key, value)
 
 def parse_operation(service, data):
-    operation = Operation(service, parse_name(data))
-    for attr in ["input", "output", "exceptions"]:
-        value = data.get(attr, [])
-        # Validate all fields
+    def attr(name):
+        value = data.get(name, [])
         map(validate_name, value)
-        setattr(operation, attr, value)
+        return value
+
+    name = parse_name(data)
+    input = attr("input")
+    output = attr("output")
+
+    operation = Operation(service, name, input, output)
     parse_metadata(operation, data, RESERVED_OPERATION_KEYS)
     return operation
 
@@ -120,10 +124,11 @@ def parse_service(data):
     parse_metadata(service, data, RESERVED_SERVICE_KEYS)
     return service
 
-def handle_request(service, operation, func):
+def handle_request(service, operation, func, input):
     context = {
-        "input": bottle.request.json,
+        "input": input,
         "output": {},
+        "exception": {},
         "service": service,
         "operation": operation
     }
@@ -159,14 +164,14 @@ def handle_exception(context, exception, invoke_event=False):
 
 
 class Operation(object):
-    def __init__(self, service, name):
+    def __init__(self, service, name, input, output):
         validate_name(name)
         self.name = name
         self._service = service
         service._register_operation(name, self)
 
-        self.input = []
-        self.output = []
+        self.input = input
+        self.output = output
         self._func = None
 
         # Build bottle route
@@ -198,12 +203,12 @@ class Operation(object):
 
         # Args must be an exact match
         if set(varnames) != set(self.input):
-            msg = "Does not match operation description"
+            msg = 'Does not match operation description: "{}" "{}"'.format(varnames, self.input)
             raise ValueError(BAD_FUNC_SIGNATURE.format(msg))
 
         self._func = func
 
-        handler = lambda: handle_request(self._service, self, func)
+        handler = lambda: handle_request(self._service, self, func, bottle.request.json)
         self._service._app.post(self._route)(handler)
         # Return the function unchanged so that it can still be invoked normally
         return func
@@ -217,6 +222,7 @@ class Service(object):
         self.exceptions = {}
         self._app = bottle.Bottle()
         self._handlers = {event:[] for event in EVENTS}
+        self._debug = False
 
         # Exceptions
         register_base_exceptions = kwargs.pop("use_base_exceptions", True)
@@ -330,7 +336,7 @@ class Service(object):
 
     def run(self, **kwargs):
         # Fail closed - assume production
-        self._debug = kwargs.get("debug", False)
+        self._debug = kwargs.get("debug", self._debug)
         if not self._mapped:
             raise ValueError("Cannot run service without mapping all operations")
         self._app.run(**kwargs)

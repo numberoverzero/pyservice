@@ -8,23 +8,23 @@ j = json.loads
 def test_invalid_name():
     service = pyservice.Service("ServiceName")
     with pytest.raises(ValueError):
-        pyservice.Operation(service, "_invalid_leading_underscore")
+        pyservice.Operation(service, "_invalid_leading_underscore", [], [])
 
 def test_route():
     service = pyservice.Service("ServiceName")
-    operation = pyservice.Operation(service, "CreateOperation")
+    operation = pyservice.Operation(service, "CreateOperation", [], [])
     assert operation._route == "/ServiceName/CreateOperation"
 
 def test_registration():
     service = pyservice.Service("ServiceName")
-    operation = pyservice.Operation(service, "CreateOperation")
+    operation = pyservice.Operation(service, "CreateOperation", [], [])
     assert "CreateOperation" in service.operations
     assert service.operations["CreateOperation"] is operation
     assert not operation._mapped
 
 def test_wrap_two_functions():
     service = pyservice.Service("ServiceName")
-    operation = pyservice.Operation(service, "CreateOperation")
+    operation = pyservice.Operation(service, "CreateOperation", [], [])
 
     with pytest.raises(ValueError):
         def create(): pass
@@ -34,7 +34,7 @@ def test_wrap_two_functions():
 
 def test_wrap_function_twice():
     service = pyservice.Service("ServiceName")
-    operation = pyservice.Operation(service, "CreateOperation")
+    operation = pyservice.Operation(service, "CreateOperation", [], [])
 
     with pytest.raises(ValueError):
         def create(): pass
@@ -43,7 +43,7 @@ def test_wrap_function_twice():
 
 def test_wrap_args():
     service = pyservice.Service("ServiceName")
-    operation = pyservice.Operation(service, "CreateOperation")
+    operation = pyservice.Operation(service, "CreateOperation", [], [])
 
     with pytest.raises(ValueError):
         def create(*args): pass
@@ -51,7 +51,7 @@ def test_wrap_args():
 
 def test_wrap_kwargs():
     service = pyservice.Service("ServiceName")
-    operation = pyservice.Operation(service, "CreateOperation")
+    operation = pyservice.Operation(service, "CreateOperation", [], [])
 
     with pytest.raises(ValueError):
         def create(**kwargs): pass
@@ -59,7 +59,7 @@ def test_wrap_kwargs():
 
 def test_wrap_too_many_args():
     service = pyservice.Service("ServiceName")
-    operation = pyservice.Operation(service, "CreateOperation")
+    operation = pyservice.Operation(service, "CreateOperation", [], [])
 
     with pytest.raises(ValueError):
         def create(a, b, c): pass

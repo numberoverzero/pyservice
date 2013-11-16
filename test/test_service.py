@@ -34,9 +34,9 @@ def test_from_filename():
 
 def test_register_operation_twice():
     service = pyservice.Service("ServiceName")
-    pyservice.Operation(service, "DuplicateOperation")
+    pyservice.Operation(service, "DuplicateOperation", [], [])
     with pytest.raises(KeyError):
-        pyservice.Operation(service, "DuplicateOperation")
+        pyservice.Operation(service, "DuplicateOperation", [], [])
 
 def test_register_exception_twice():
     service = pyservice.Service("ServiceName")
@@ -123,3 +123,29 @@ def test_raise_unknown_exception():
 
     with pytest.raises(pyservice.ServerException):
         service.raise_("MyException", "message")
+
+def test_event_ordering():
+    class OrderingLayer(pyservice.Layer):
+        events = []
+        def on_input(self, context):
+            OrderingLayer.events.append("input")
+        def on_output(self, context):
+            OrderingLayer.events.append("output")
+        @property
+        def validate(self):
+            assert OrderingLayer.events == ["input", "output"]
+
+    data = j('{"name": "ServiceName", "operations": [{"name":"noop", "input": [], "output": []}]}')
+    service = pyservice.parse_service(data)
+    operation = service.operations["noop"]
+    @service.operation("noop")
+    def concat():
+        return None
+
+    layer = OrderingLayer(service)
+    assert concat
+    assert not pyservice.handle_request(service, operation, concat, {})
+    assert layer.on_input in service._handlers['on_input']
+    assert layer.on_output in service._handlers['on_output']
+
+    #layer.validate
