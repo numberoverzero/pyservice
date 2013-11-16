@@ -1,6 +1,5 @@
 import pytest
 import pyservice
-pyservice.BasicValidationLayer
 
 def build_context(input_json=None, result=None, func=None, input=None, output=None):
     service_json = {
