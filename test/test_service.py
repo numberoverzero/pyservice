@@ -43,12 +43,6 @@ def test_register_exception_twice():
     service._register_exception(DummyException)
     service._register_exception(DummyException)
 
-def test_basic_exceptions_registered():
-    service = pyservice.Service("ServiceName")
-    assert pyservice.ServiceException in service.exceptions
-    assert pyservice.ServerException in service.exceptions
-    assert pyservice.ClientException in service.exceptions
-
 def test_config():
     service = pyservice.Service("ServiceName")
     app_config = service._app.config

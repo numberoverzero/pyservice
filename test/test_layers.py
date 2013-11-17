@@ -104,7 +104,7 @@ def test_layer_raise_unknown_exception():
     result = pyservice.handle_request(service, operation, func, {})
     assert result == {
         "__exception": {
-            "cls": "ServerException",
+            "cls": "ServiceException",
             "args": ('Internal Error',)
         }
     }

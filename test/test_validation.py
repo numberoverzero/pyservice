@@ -49,7 +49,7 @@ def test_on_input_without_wrapping():
     input = "abc"
 
     context = build_context(input_json=input_json, input=input)
-    with pytest.raises(pyservice.ServerException):
+    with pytest.raises(pyservice.ServiceException):
         pyservice.validate_input(context)
 
 def test_on_input_no_args():
@@ -75,7 +75,7 @@ def test_on_input_too_few_args():
     input = "ab"
 
     context = build_context(input_json=input_json, func=func, input=input)
-    with pytest.raises(pyservice.ClientException):
+    with pytest.raises(pyservice.ServiceException):
         pyservice.validate_input(context)
 
 def test_on_input_too_many_args():
@@ -105,7 +105,7 @@ def test_on_input_wrong_args():
     input = "ab"
 
     context = build_context(input_json=input_json, func=func, input=input)
-    with pytest.raises(pyservice.ClientException):
+    with pytest.raises(pyservice.ServiceException):
         pyservice.validate_input(context)
 
 def test_on_output_no_args():
@@ -129,7 +129,7 @@ def test_on_output_too_few_args():
     output = "ab"
 
     context = build_context(output_json=output_json, func=func, output=output)
-    with pytest.raises(pyservice.ServerException):
+    with pytest.raises(pyservice.ServiceException):
         pyservice.validate_output(context)
 
 def test_on_output_too_many_args():

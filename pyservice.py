@@ -38,9 +38,9 @@ def validate_input(context):
     op_args = set(context["operation"].input)
     if not json_input.issuperset(op_args):
         msg = 'Input "{}" does not contain required params "{}"'
-        raise ClientException(msg.format(context["input"], op_args))
+        raise ServiceException(msg.format(context["input"], op_args))
     if context["operation"]._func is None:
-        raise ServerException("No wrapped function to order input args by!")
+        raise ServiceException("No wrapped function to order input args by!")
 
 def validate_output(context):
     '''Make sure the expected fields are present in the output'''
@@ -48,18 +48,19 @@ def validate_output(context):
     op_returns = set(context["operation"].output)
     if not json_output.issuperset(op_returns):
         msg = 'Output "{}" does not contain required values "{}"'
-        raise ServerException(msg.format(context["output"], op_returns))
+        raise ServiceException(msg.format(context["output"], op_returns))
 
 def validate_exception(context):
     '''Make sure the exception returned is whitelisted - otherwise throw a generic InteralException'''
     exception = context["__exception"]
-    whitelisted_exceptions = context["service"].exceptions
-    whitelisted = exception.__class__ in whitelisted_exceptions
-    debugging = context["service"]._debug
+    service = context["service"]
+
+    whitelisted = exception.__class__ in service.exceptions
+    debugging = service._debug
 
     if not whitelisted and not debugging:
         # Blow away the exception
-        context["__exception"] = ServerException()
+        context["__exception"] = ServiceException()
 
 def map_output(result, context):
     '''
@@ -204,17 +205,6 @@ class Service(object):
         self._layers = []
         self._debug = False
 
-        # Exceptions
-        register_base_exceptions = kwargs.pop("use_base_exceptions", True)
-        _base_exceptions = [
-            ServiceException,
-            ServerException,
-            ClientException
-        ]
-        if register_base_exceptions:
-            for exception_cls in _base_exceptions:
-                self._register_exception(exception_cls)
-
     @classmethod
     def from_json(cls, data):
         return parse_service(data)
@@ -290,18 +280,11 @@ class Service(object):
 
 class ServiceException(Exception):
     '''Represents an error during Service operation'''
-    pass
-
-class ServerException(ServiceException):
-    '''The server did something wrong'''
     default_message = "Internal Error"
-    def __init__(self, message=None, **kwargs):
-        message = message or ServerException.default_message
-        super(ServerException, self).__init__(message, **kwargs)
+    def __init__(self, *args):
+        args = args or [self.default_message]
+        super(ServiceException, self).__init__(*args)
 
-class ClientException(ServiceException):
-    '''The client did something wrong'''
-    pass
 
 class Layer(object):
     def __init__(self, service=None, **kwargs):

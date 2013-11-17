@@ -43,4 +43,3 @@ Client:
 Server:
     Exceptions:
         Testing (including nested layer catching)
-        Remove basic exceptions from Service.__init__
