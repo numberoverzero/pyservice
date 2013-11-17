@@ -56,6 +56,12 @@ def test_basic_exceptions_registered():
     assert service.exceptions["ServerException"] is pyservice.ServerException
     assert service.exceptions["ClientException"] is pyservice.ClientException
 
+def test_config():
+    service = pyservice.Service("ServiceName")
+    app_config = service._app.config
+    service_config = service._config
+    assert app_config is service_config
+
 def test_full_operation_decorator():
     data = j('{"name": "ServiceName", "operations": [{"name":"CreateOperation", "input": ["arg1"]}]}')
     service = pyservice.parse_service(data)
@@ -102,6 +108,26 @@ def test_run_without_mapping():
     assert not service._mapped
     with pytest.raises(ValueError):
         service.run()
+
+def test_run_invokes_app_run():
+    data = j('{"name": "ServiceName", "operations": []}')
+    service = pyservice.parse_service(data)
+
+    # Mock the service app since we just care that it's invoked with the same kwargs
+    class App(object):
+        def __init__(self, **passed_kwargs):
+            self.passed_kwargs = passed_kwargs
+        def run(self, **kwargs):
+            assert kwargs == self.passed_kwargs
+
+    kwargs = {
+        "arg1": "Hello",
+        "arg2": 2,
+        "arg3": [0, 1, 2]
+    }
+    app = App(**kwargs)
+    service._app = app
+    service.run(**kwargs)
 
 def test_raise_builtin_exception():
     service = pyservice.Service("ServiceName")

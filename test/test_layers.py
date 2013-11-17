@@ -35,6 +35,23 @@ def test_layer_ordering():
     assert not pyservice.handle_request(service, operation, noop, {})
     assert expected_order == actual_order
 
+def test_base_layer_does_nothing():
+
+    service, operation, noop = noop_service()
+    pyservice.Layer(service)
+    assert not pyservice.handle_request(service, operation, noop, {})
+
+
+def test_stack_append_extend_pass_through():
+    stack = pyservice.Stack()
+    backing_list = stack.layers
+    assert not backing_list
+
+    stack.append("Hello")
+    assert ["Hello"] == backing_list
+
+    stack.extend(["World", "!"])
+    assert ["Hello", "World", "!"] == backing_list
 
 # test layer on_exception called
 
