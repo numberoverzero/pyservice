@@ -21,7 +21,6 @@ RESERVED_OPERATION_KEYS = [
 
 OP_ALREADY_MAPPED = "Route has already been created for operation {}"
 OP_ALREADY_REGISTERED = "Tried to register duplicate operation {}"
-EX_ALREADY_REGISTERED = "Tried to register duplicate exception {}"
 BAD_FUNC_SIGNATURE = "Invalid function signature: {}"
 
 # Most names can only be \w*,
@@ -53,14 +52,14 @@ def validate_output(context):
 
 def validate_exception(context):
     '''Make sure the exception returned is whitelisted - otherwise throw a generic InteralException'''
-    exception = context["exception"]
+    exception = context["__exception"]
     whitelisted_exceptions = context["service"].exceptions
     whitelisted = exception.__class__ in whitelisted_exceptions
     debugging = context["service"]._debug
 
     if not whitelisted and not debugging:
         # Blow away the exception
-        context["exception"] = ServerException()
+        context["__exception"] = ServerException()
 
 def map_output(result, context):
     '''
@@ -133,12 +132,14 @@ def handle_request(service, operation, func, input):
         return context["output"]
 
     except Exception as exception:
-        context["exception"] = exception
+        context["__exception"] = exception
         validate_exception(context)
-        exception = context["exception"]
+        exception = context["__exception"]
         return {
-            '_e': exception.__class__,
-            'msg': exception.message
+            "__exception": {
+                'cls': exception.__class__.__name__,
+                'args': exception.args
+            }
         }
 
 
@@ -198,7 +199,7 @@ class Service(object):
         validate_name(name)
         self.name = name
         self.operations = {}
-        self.exceptions = {}
+        self.exceptions = []
         self._app = bottle.Bottle()
         self._layers = []
         self._debug = False
@@ -206,13 +207,13 @@ class Service(object):
         # Exceptions
         register_base_exceptions = kwargs.pop("use_base_exceptions", True)
         _base_exceptions = [
-            ("ServiceException", ServiceException),
-            ("ServerException", ServerException),
-            ("ClientException", ClientException)
+            ServiceException,
+            ServerException,
+            ClientException
         ]
         if register_base_exceptions:
-            for name, exception_cls in _base_exceptions:
-                self._register_exception(name, exception_cls)
+            for exception_cls in _base_exceptions:
+                self._register_exception(exception_cls)
 
     @classmethod
     def from_json(cls, data):
@@ -228,10 +229,8 @@ class Service(object):
             raise KeyError(OP_ALREADY_REGISTERED.format(name))
         self.operations[name] = operation
 
-    def _register_exception(self, name, exception_cls):
-        if name in self.exceptions:
-            raise KeyError(EX_ALREADY_REGISTERED.format(name))
-        self.exceptions[name] = exception_cls
+    def _register_exception(self, exception_cls):
+        self.exceptions.append(exception_cls)
 
     def _register_layer(self, layer):
         self._layers.append(layer)
@@ -280,18 +279,6 @@ class Service(object):
     def _config(self):
         '''Keep config centralized in bottle app'''
         return self._app.config
-
-    def raise_(self, name, message=''):
-        '''
-        Raise an exception registered with the service
-
-        If no exception with the given name is registered,
-        raises a generic ServerException
-        '''
-        exception = self.exceptions.get(name, None)
-        if not exception:
-            raise ServerException()
-        raise exception(message)
 
     def run(self, **kwargs):
         # Fail closed - assume production

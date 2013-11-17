@@ -53,5 +53,58 @@ def test_stack_append_extend_pass_through():
     stack.extend(["World", "!"])
     assert ["Hello", "World", "!"] == backing_list
 
-# test layer on_exception called
+def test_layer_raise_exception():
+    data = j('{"name": "ServiceName", "operations": [{"name":"Raise", "input": [], "output": []}]}')
+    service = pyservice.parse_service(data)
+    operation = service.operations["Raise"]
 
+
+    class MyException(Exception):
+        pass
+    service._register_exception(MyException)
+
+    class MyLayer(pyservice.Layer):
+        def handle_request(self, context, next):
+            next.handle_request(context)
+            raise MyException("MyMessage")
+    MyLayer(service)
+
+    @service.operation("Raise")
+    def func():
+        return None
+
+    result = pyservice.handle_request(service, operation, func, {})
+    assert result == {
+        "__exception": {
+            "cls": "MyException",
+            "args": ('MyMessage',)
+        }
+    }
+
+def test_layer_raise_unknown_exception():
+
+    # Same test as previous, but exception isn't registered.  Should get an Internal Error instead
+    data = j('{"name": "ServiceName", "operations": [{"name":"Raise", "input": [], "output": []}]}')
+    service = pyservice.parse_service(data)
+    operation = service.operations["Raise"]
+
+
+    class MyException(Exception): pass
+
+    class MyLayer(pyservice.Layer):
+        def handle_request(self, context, next):
+            next.handle_request(context)
+            raise MyException("MyMessage")
+    MyLayer(service)
+
+    @service.operation("Raise")
+    def func():
+        return None
+
+    result = pyservice.handle_request(service, operation, func, {})
+    assert result == {
+        "__exception": {
+            "cls": "ServerException",
+            "args": ('Internal Error',)
+        }
+    }

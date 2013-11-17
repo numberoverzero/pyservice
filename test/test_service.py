@@ -40,21 +40,14 @@ def test_register_operation_twice():
 def test_register_exception_twice():
     service = pyservice.Service("ServiceName")
     class DummyException(pyservice.ServiceException): pass
-    service._register_exception("DummyException", DummyException)
-    with pytest.raises(KeyError):
-        service._register_exception("DummyException", DummyException)
-
-def test_reregister_builtin_exception():
-    service = pyservice.Service("ServiceName")
-    class DummyException(pyservice.ServiceException): pass
-    with pytest.raises(KeyError):
-        service._register_exception("ServiceException", DummyException)
+    service._register_exception(DummyException)
+    service._register_exception(DummyException)
 
 def test_basic_exceptions_registered():
     service = pyservice.Service("ServiceName")
-    assert service.exceptions["ServiceException"] is pyservice.ServiceException
-    assert service.exceptions["ServerException"] is pyservice.ServerException
-    assert service.exceptions["ClientException"] is pyservice.ClientException
+    assert pyservice.ServiceException in service.exceptions
+    assert pyservice.ServerException in service.exceptions
+    assert pyservice.ClientException in service.exceptions
 
 def test_config():
     service = pyservice.Service("ServiceName")
@@ -128,23 +121,3 @@ def test_run_invokes_app_run():
     app = App(**kwargs)
     service._app = app
     service.run(**kwargs)
-
-def test_raise_builtin_exception():
-    service = pyservice.Service("ServiceName")
-    with pytest.raises(pyservice.ClientException):
-        service.raise_("ClientException", "message")
-
-def test_raise_registered_exception():
-    service = pyservice.Service("ServiceName")
-    class MyException(Exception): pass
-    service._register_exception("MyException", MyException)
-
-    with pytest.raises(MyException):
-        service.raise_("MyException", "message")
-
-def test_raise_unknown_exception():
-    service = pyservice.Service("ServiceName")
-    class MyException(Exception): pass
-
-    with pytest.raises(pyservice.ServerException):
-        service.raise_("MyException", "message")
