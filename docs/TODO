@@ -1,0 +1,46 @@
+TODO
+========================
+
+Documentation:
+    docstrings for all top-level classes
+    Intro/walkthrough (see bottle.py)
+
+Description file:
+    Formal specification of format
+    Support input/ouput shorthand:
+        {
+            "name": "ServiceName",
+            "operations": [
+                {
+                    "name": "OperationName",
+                    "input": "username",
+                    "output": "userid"
+                }
+            ]
+        }
+    Support input/output metadata:
+        {
+            "name": "ServiceName",
+            "operations": [
+                {
+                    "name": "OperationName",
+                    "input": [
+                        {
+                            "name": "username",
+                            "type": "String",
+                            "validation": "^[a-zA-z]{3,12}$"
+                        },
+                        "validation_token"
+                    ],
+                    "output": "userid"
+                }
+            ]
+        }
+
+Client:
+    Make one
+
+Server:
+    Exceptions:
+        Testing (including nested layer catching)
+        Remove basic exceptions from Service.__init__
