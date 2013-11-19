@@ -315,9 +315,11 @@ class Client(object):
 
     def _unpack_result(self, operation, response):
         func_results = self._service.operations[operation].output
-        if len(response) == 1 and "__exception" in response:
-            exception = response["__exception"]
-            self._throw_exception(exception["cls"], *exception["args"])
+        if len(response) == 1:
+            if "__exception" in response:
+                exception = response["__exception"]
+                self._throw_exception(exception["cls"], *exception["args"])
+            return response[func_results[0]]
         if len(func_results) != len(response):
             raise ServiceException("Expected {} results, got {}".format(len(response), len(func_results)))
         if not func_results:
