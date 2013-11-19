@@ -1,6 +1,23 @@
 TODO
 ========================
 
+Project:
+    1) Refactor entire layout:
+        pyservice
+            |
+            |- __init__.py
+            |- service.py
+            |- client.py
+            |- description.py
+            |- validation.py
+            |- layer.py
+    2) Move to JSON-RPC 2.0
+    3) Refactor exceptions to live on client/service:
+        try:
+            print client.get_task(task_id)
+        except client.exceptions.UnknownTaskId as e:
+            print e
+
 Documentation:
     docstrings for all top-level classes
     Intro/walkthrough (see bottle.py)
@@ -38,7 +55,7 @@ Description file:
         }
 
 Client:
-    Make one
+    Move to
 
 Server:
     Exceptions:
