@@ -2,6 +2,7 @@ import re
 import six
 import json
 import bottle
+import requests
 
 RESERVED_SERVICE_KEYS = [
     "exceptions",
@@ -61,28 +62,6 @@ def validate_exception(context):
     if not whitelisted and not debugging:
         # Blow away the exception
         context["__exception"] = ServiceException()
-
-def map_output(result, context):
-    '''
-    Using the operation's description, map result fields to
-    context["output"]
-    '''
-    output_keys = context["operation"].output
-
-    # No output expected
-    if len(output_keys) == 0:
-        return
-
-    # One value - assume that even objs with an __iter__
-    # method represent one value (such as strings)
-    if len(output_keys) == 1:
-        result = [result]
-
-    # Multiple values
-    # We don't raise on unequal lengths, in case there's some
-    # weird post-processing going on
-    for key, value in zip(output_keys, result):
-        context["output"][key] = value
 
 def parse_name(data):
     name = data["name"]
@@ -278,12 +257,88 @@ class Service(object):
         self._app.run(**kwargs)
 
 
+class Client(object):
+    def __init__(self, service, **config):
+        self._service = service
+        self._config = config
+
+        # Get host/port from service
+        # Fallback to config
+        # Default to
+        host = getattr(service, "host", None)
+        host = host or getattr(config, "host", None)
+        host = host or "localhost"
+
+        port = getattr(service, "port", None)
+        port = port or getattr(config, "port", None)
+        port = port or "8080"
+
+        uri = {
+            "host": host,
+            "port": port,
+            "service": service.name
+        }
+        self._uri = "{host}:{port}/{service}/{{operation}}".format(**uri)
+        map(self._build_operation, self._service.operations)
+
+    @classmethod
+    def from_json(cls, data, **config):
+        service = parse_service(data)
+        return Client(service, **config)
+
+    @classmethod
+    def from_file(cls, filename, **config):
+        with open(filename) as f:
+            data = json.loads(f.read())
+            return Client.from_json(data, **config)
+
+    def _call_operation(self, operation, *args):
+        uri = self._uri.format(operation=operation)
+        params = self._pack_params(operation, *args)
+        response = requests.post(uri, params=params)
+        result = self._unpack_result(operation, response.json)
+        return result
+
+    def _pack_params(self, operation, *args):
+        # Verify args match function signature
+        func_args = self._service.operations[operation].input
+        if args and not func_args:
+            raise ClientException("Passed args '{}' but not expecting any".format(args))
+        return dict(zip(func_args, args))
+
+    def _unpack_result(self, operation, response):
+        func_results = self._service.operations[operation].output
+        if len(response) == 1 and "__exception" in response:
+            exception = response["__exception"]
+            self._throw_exception(exception["cls"], *exception["args"])
+        if len(func_results) != len(response):
+            raise ServiceException("Expected {} results, got {}".format(len(response), len(func_results)))
+        if not func_results:
+            return None
+        return [response[key] for key in func_results]
+
+    def _throw_exception(self, exception, *args):
+        raise type(exception, (ServiceException,), {})(*args)
+
+    def _build_operation(self, operation):
+        setattr(self, operation,
+            lambda *args: self._call_operation(operation, *args))
+
+
 class ServiceException(Exception):
     '''Represents an error during Service operation'''
     default_message = "Internal Error"
     def __init__(self, *args):
         args = args or [self.default_message]
         super(ServiceException, self).__init__(*args)
+
+
+class ClientException(Exception):
+    '''Represents an error made by the Client when calling an operation'''
+    default_message = "Invalid call"
+    def __init__(self, *args):
+        args = args or [self.default_message]
+        super(ClientException, self).__init__(*args)
 
 
 class Layer(object):
@@ -330,6 +385,28 @@ class FunctionExecutor(object):
         args = [data[argname] for argname in self.operation._argnames]
 
         result = self.func(*args)
-        map_output(result, context)
+        self.map_output(result, context)
         next.handle_request(context)
+
+    def map_output(self, result, context):
+        '''
+        Using the operation's description, map result fields to
+        context["output"]
+        '''
+        output_keys = context["operation"].output
+
+        # No output expected
+        if len(output_keys) == 0:
+            return
+
+        # One value - assume that even objs with an __iter__
+        # method represent one value (such as strings)
+        if len(output_keys) == 1:
+            result = [result]
+
+        # Multiple values
+        # We don't raise on unequal lengths, in case there's some
+        # weird post-processing going on
+        for key, value in zip(output_keys, result):
+            context["output"][key] = value
 
