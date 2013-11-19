@@ -262,9 +262,13 @@ class Client(object):
         self._service = service
         self._config = config
 
-        # Get host/port from service
+        # Get schema/host/port from service
         # Fallback to config
-        # Default to
+        # Default to http://localhost:8080
+        schema = getattr(service, "schema", None)
+        schema = schema or getattr(config, "schema", None)
+        schema = schema or "http"
+
         host = getattr(service, "host", None)
         host = host or getattr(config, "host", None)
         host = host or "localhost"
@@ -274,11 +278,12 @@ class Client(object):
         port = port or "8080"
 
         uri = {
+            "schema": schema,
             "host": host,
             "port": port,
             "service": service.name
         }
-        self._uri = "{host}:{port}/{service}/{{operation}}".format(**uri)
+        self._uri = "{schema}://{host}:{port}/{service}/{{operation}}".format(**uri)
         map(self._build_operation, self._service.operations)
 
     @classmethod
@@ -294,9 +299,11 @@ class Client(object):
 
     def _call_operation(self, operation, *args):
         uri = self._uri.format(operation=operation)
-        params = self._pack_params(operation, *args)
-        response = requests.post(uri, params=params)
-        result = self._unpack_result(operation, response.json)
+        data = self._pack_params(operation, *args)
+        headers = {'Content-type': 'application/json'}
+
+        response = requests.post(uri, data=json.dumps(data), headers=headers)
+        result = self._unpack_result(operation, response.json())
         return result
 
     def _pack_params(self, operation, *args):
@@ -318,7 +325,8 @@ class Client(object):
         return [response[key] for key in func_results]
 
     def _throw_exception(self, exception, *args):
-        raise type(exception, (ServiceException,), {})(*args)
+        ex_type = exception.encode('ascii', 'ignore')
+        raise type(ex_type, (ServiceException,), {})(*args)
 
     def _build_operation(self, operation):
         setattr(self, operation,
