@@ -1,12 +1,17 @@
 import json
 
-import pyservice
+from pyservice.service import parse_service
+from pyservice.layer import (
+    Layer,
+    Stack
+)
+from pyservice.operation import handle_request
 
 j = json.loads
 
 def noop_service():
     data = j('{"name": "ServiceName", "operations": [{"name":"noop", "input": [], "output": []}]}')
-    service = pyservice.parse_service(data)
+    service = parse_service(data)
     operation = service.operations["noop"]
     @service.operation
     def noop():
@@ -16,7 +21,7 @@ def noop_service():
 
 def test_layer_ordering():
 
-    class OrderingLayer(pyservice.Layer):
+    class OrderingLayer(Layer):
         def __init__(self, service, name, **kw):
             self.name = name
             expected_order.append(self.name)
@@ -32,18 +37,18 @@ def test_layer_ordering():
     OrderingLayer(service, "first")
     OrderingLayer(service, "second")
 
-    assert not pyservice.handle_request(service, operation, noop, {})
+    assert not handle_request(service, operation, noop, {})
     assert expected_order == actual_order
 
 def test_base_layer_does_nothing():
 
     service, operation, noop = noop_service()
-    pyservice.Layer(service)
-    assert not pyservice.handle_request(service, operation, noop, {})
+    Layer(service)
+    assert not handle_request(service, operation, noop, {})
 
 
 def test_stack_append_extend_pass_through():
-    stack = pyservice.Stack()
+    stack = Stack()
     backing_list = stack.layers
     assert not backing_list
 
@@ -55,7 +60,7 @@ def test_stack_append_extend_pass_through():
 
 def test_layer_raise_exception():
     data = j('{"name": "ServiceName", "operations": [{"name":"Raise", "input": [], "output": []}]}')
-    service = pyservice.parse_service(data)
+    service = parse_service(data)
     operation = service.operations["Raise"]
 
 
@@ -63,7 +68,7 @@ def test_layer_raise_exception():
         pass
     service._register_exception(MyException)
 
-    class MyLayer(pyservice.Layer):
+    class MyLayer(Layer):
         def handle_request(self, context, next):
             next.handle_request(context)
             raise MyException("MyMessage")
@@ -73,7 +78,7 @@ def test_layer_raise_exception():
     def func():
         return None
 
-    result = pyservice.handle_request(service, operation, func, {})
+    result = handle_request(service, operation, func, {})
     assert result == {
         "__exception": {
             "cls": "MyException",
@@ -85,13 +90,13 @@ def test_layer_raise_unknown_exception():
 
     # Same test as previous, but exception isn't registered.  Should get an Internal Error instead
     data = j('{"name": "ServiceName", "operations": [{"name":"Raise", "input": [], "output": []}]}')
-    service = pyservice.parse_service(data)
+    service = parse_service(data)
     operation = service.operations["Raise"]
 
 
     class MyException(Exception): pass
 
-    class MyLayer(pyservice.Layer):
+    class MyLayer(Layer):
         def handle_request(self, context, next):
             next.handle_request(context)
             raise MyException("MyMessage")
@@ -101,7 +106,7 @@ def test_layer_raise_unknown_exception():
     def func():
         return None
 
-    result = pyservice.handle_request(service, operation, func, {})
+    result = handle_request(service, operation, func, {})
     assert result == {
         "__exception": {
             "cls": "ServiceException",
