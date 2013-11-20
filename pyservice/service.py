@@ -57,10 +57,6 @@ class Service(object):
     def _register_layer(self, layer):
         self._layers.append(layer)
 
-    @property
-    def _stack(self):
-        return Stack(self._layers[:])
-
     def operation(self, name=None, func=None, **kwargs):
         '''
         Return a decorator that maps an operation name to a function
