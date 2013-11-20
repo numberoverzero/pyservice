@@ -14,7 +14,7 @@ def handle(service, operation, body):
     serializer = JsonSerializer()
 
     string_in = body
-    dict_in = serializer.deserialize(string_in, strict=False)
+    dict_in = serializer.deserialize(string_in)
     dict_out = _handle(service, operation, operation._func, dict_in)
     string_out = serializer.deserialize(dict_out)
     return string_out
