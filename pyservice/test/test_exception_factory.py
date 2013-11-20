@@ -1,3 +1,4 @@
+import six
 import pytest
 from contextlib import contextmanager
 
@@ -58,14 +59,13 @@ def test_missing_builtin():
 
 @contextmanager
 def removed_global(name):
-    from sys import modules
-    builtin = modules['__builtin__']
+    builtins = six.moves.builtins
 
     # Save object so we can put it back after the test
-    obj = getattr(builtin, name)
-    delattr(builtin, name)
+    obj = getattr(builtins, name)
+    delattr(builtins, name)
 
     yield
 
     # Put the object back so other tests don't break
-    setattr(builtin, name, obj)
+    setattr(builtins, name, obj)

@@ -1,3 +1,5 @@
+import six
+
 BUILTIN_EXCEPTIONS = [
 "ArithmeticError",
 "AssertionError",
@@ -50,7 +52,6 @@ BUILTIN_EXCEPTIONS = [
 "ZeroDivisionError",
 ]
 
-__exceptions = {}
 
 class ExceptionFactory(object):
     def __init__(self):
@@ -66,7 +67,7 @@ class ExceptionFactory(object):
             if not ex_cls:
                 ex_cls = self._build_exception(name)
         else:
-            ex_cls = __builtins__.get(name, None)
+            ex_cls = getattr(six.moves.builtins, name, None)
             # maybe the exception class was deleted? Who knows
             if not ex_cls:
                 raise NameError("global name '{}' is not defined".format(name))
