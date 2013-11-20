@@ -2,7 +2,9 @@ import os
 import json
 import pytest
 
-import pyservice
+from pyservice.service import Service, parse_service
+from pyservice.common import ServiceException
+from pyservice.operation import Operation
 
 j = json.loads
 
@@ -11,47 +13,47 @@ here = os.path.dirname(os.path.realpath(__file__))
 
 def test_invalid_name():
     with pytest.raises(ValueError):
-        pyservice.Service("_invalid_leading_underscore")
+        Service("_invalid_leading_underscore")
 
 def test_bad_json():
     not_json = "bad_json"
     with pytest.raises(TypeError):
-        pyservice.Service.from_json(not_json)
+        Service.from_json(not_json)
 
 def test_empty_service():
     junk_string = '{"name": "foo", "operations": []}'
     junk_json = json.loads(junk_string)
-    service = pyservice.Service.from_json(junk_json)
+    service = Service.from_json(junk_json)
     assert len(service.operations) == 0
     assert service._mapped
 
 def test_from_filename():
     filename = os.path.join(here, "BeerService.json")
-    service = pyservice.Service.from_file(filename)
+    service = Service.from_file(filename)
     assert len(service.operations) == 3
     assert not service._mapped
 
 def test_register_operation_twice():
-    service = pyservice.Service("ServiceName")
-    pyservice.Operation(service, "DuplicateOperation", [], [])
+    service = Service("ServiceName")
+    Operation(service, "DuplicateOperation", [], [])
     with pytest.raises(KeyError):
-        pyservice.Operation(service, "DuplicateOperation", [], [])
+        Operation(service, "DuplicateOperation", [], [])
 
 def test_register_exception_twice():
-    service = pyservice.Service("ServiceName")
-    class DummyException(pyservice.ServiceException): pass
+    service = Service("ServiceName")
+    class DummyException(ServiceException): pass
     service._register_exception(DummyException)
     service._register_exception(DummyException)
 
 def test_config():
-    service = pyservice.Service("ServiceName")
+    service = Service("ServiceName")
     app_config = service._app.config
     service_config = service._config
     assert app_config is service_config
 
 def test_full_operation_decorator():
     data = j('{"name": "ServiceName", "operations": [{"name":"CreateOperation", "input": ["arg1"]}]}')
-    service = pyservice.parse_service(data)
+    service = parse_service(data)
 
     @service.operation("CreateOperation")
     def create(arg1): pass
@@ -60,7 +62,7 @@ def test_full_operation_decorator():
 
 def test_partial_operation_decorator():
     data = j('{"name": "ServiceName", "operations": [{"name":"create", "input": ["arg1"]}]}')
-    service = pyservice.parse_service(data)
+    service = parse_service(data)
 
     @service.operation
     def create(arg1): pass
@@ -69,7 +71,7 @@ def test_partial_operation_decorator():
 
 def test_direct_call_operation_decorator():
     data = j('{"name": "ServiceName", "operations": [{"name":"CreateOperation", "input": ["arg1"]}]}')
-    service = pyservice.parse_service(data)
+    service = parse_service(data)
     def create(arg1): pass
 
     service.operation("CreateOperation", create)
@@ -78,7 +80,7 @@ def test_direct_call_operation_decorator():
 
 def test_decorated_function_returns_original():
     data = j('{"name": "ServiceName", "operations": [{"name":"ConcatOperation", "input": ["a", "b"], "output": ["ab"]}]}')
-    service = pyservice.parse_service(data)
+    service = parse_service(data)
 
     def concat(a, b):
         return a + b
@@ -90,7 +92,7 @@ def test_decorated_function_returns_original():
 
 def test_run_without_mapping():
     data = j('{"name": "ServiceName", "operations": [{"name":"ConcatOperation", "input": ["a", "b"], "output": ["ab"]}]}')
-    service = pyservice.parse_service(data)
+    service = parse_service(data)
 
     assert not service._mapped
     with pytest.raises(ValueError):
@@ -98,7 +100,7 @@ def test_run_without_mapping():
 
 def test_run_invokes_app_run():
     data = j('{"name": "ServiceName", "operations": []}')
-    service = pyservice.parse_service(data)
+    service = parse_service(data)
 
     # Mock the service app since we just care that it's invoked with the same kwargs
     class App(object):
