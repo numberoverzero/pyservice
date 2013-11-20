@@ -1,50 +1,46 @@
+import bottle
 from pyservice.serialize import JsonSerializer
 from pyservice.utils import (
     validate_input,
     validate_output,
     validate_exception
 )
+from pyservice.layer import Stack
 
 def handle(service, operation, body):
-    # Move logic in handle_request to this method
-    # (or helpers)
-
-    # TODO: hadcoding json serializer for now
+    # TODO: hardcoding json serializer for now
     # This should be an arg passed into handle
     serializer = JsonSerializer()
 
-    string_in = body
-    dict_in = serializer.deserialize(string_in)
-    dict_out = _handle(service, operation, operation._func, dict_in)
-    string_out = serializer.deserialize(dict_out)
-    return string_out
-
-def _handle(service, operation, func, input):
-    context = {
-        "input": input,
-        "output": {},
-        "service": service,
-        "operation": operation
-    }
     try:
-        # Set up layers, including real execution pseudo-layer
-        stack = service._stack
-        stack.append(FunctionExecutor(operation, func))
+        context = {
+            "input": serializer.deserialize(body),
+            "output": {},
+            "service": service,
+            "operation": operation
+        }
+        stack = Stack(service._layers[:])
+        stack.append(FunctionExecutor(operation, operation._func))
         stack.handle_request(context)
 
         validate_output(context)
-        return context["output"]
-
+        result = context["output"]
     except Exception as exception:
-        context["__exception"] = exception
+        context["exception"] = exception
         validate_exception(context)
-        exception = context["__exception"]
-        return {
+        exception = context["exception"]
+        result = {
             "__exception": {
                 'cls': exception.__class__.__name__,
                 'args': exception.args
             }
         }
+    finally:
+        try:
+            return serializer.serialize(result)
+        except Exception:
+            bottle.abort(500, "Internal Error")
+
 
 class FunctionExecutor(object):
     def __init__(self, operation, func):
@@ -61,6 +57,8 @@ class FunctionExecutor(object):
         next.handle_request(context)
 
     def map_output(self, result, context):
+        # TODO: This needs to be refactored to a common location
+        #       so that Client can use it for unpacking operation output
         '''
         Using the operation's description, map result fields to
         context["output"]
