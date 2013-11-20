@@ -48,19 +48,13 @@ def test_different_factories():
     assert exception.__class__ is not another_exception.__class__
 
 def test_missing_builtin():
-    '''This test messes with global modules - be careful when updating,
-    as it currently deletes a built-in exception type and puts it back after
-    testing.  Many things will break in unpredictable ways if the error
-    is not properly re-added to __builtin__ after testing.'''
-
-
-    name = "TypeError"
+    name = "NameError"
     args = [1, 2, 3]
 
+    RealNameError = NameError
     with removed_global(name):
-        with pytest.raises(NameError):
+        with pytest.raises(RealNameError):
             ExceptionFactory().exception(name, *args)
-
 
 @contextmanager
 def removed_global(name):
