@@ -68,8 +68,8 @@ NOTE
 class JsonSerializer(object):
     format = "JSON"
 
-    def serialize(data, **kw):
+    def serialize(self, data, **kw):
         return json.dumps(data)
 
-    def deserialize(string, **kw):
+    def deserialize(self, string, **kw):
         return json.loads(string)
