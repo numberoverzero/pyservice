@@ -43,6 +43,7 @@ class Operation(object):
         return self._func.__code__.co_varnames
 
     def _wrap(self, func, **kwargs):
+        # TODO: See what's really needed here now that we're doing routing in the service
         if self._func:
             raise ValueError(OP_ALREADY_MAPPED.format(self.name))
 
@@ -60,8 +61,6 @@ class Operation(object):
 
         self._func = func
 
-        handler = lambda: handle_request(self._service, self, func, bottle.request.json)
-        self._service._app.post(self._route)(handler)
         # Return the function unchanged so that it can still be invoked normally
         return func
 
@@ -80,6 +79,8 @@ def parse_operation(service, data):
     return operation
 
 def handle_request(service, operation, func, input):
+    # TODO: This entire method needs to move out of Operation and into Service
+    #       Don't forget to clean up Operation._wrap above!
     context = {
         "input": input,
         "output": {},

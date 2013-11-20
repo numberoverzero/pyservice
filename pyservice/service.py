@@ -11,7 +11,7 @@ from pyservice.common import (
     OP_ALREADY_REGISTERED,
     RESERVED_SERVICE_KEYS
 )
-from pyservice.operation import parse_operation
+from pyservice.operation import parse_operation, handle_request
 from pyservice.layer import Stack
 
 
@@ -21,7 +21,17 @@ class Service(object):
         self.name = name
         self.operations = {}
         self.exceptions = []
+
         self._app = bottle.Bottle()
+        @self._app.post("/{service}/<operation>".format(service=self.name))
+        def handle(operation):
+            # TODO: Update handler below to use registered serializers, and
+            #         make this pass bottle.request.body
+            #       route should probably be /api/service/<operation>/<protocol>
+            #         and this function can delegate the call based on registered
+            #         serializers
+            return self.handle(operation, bottle.request.json)
+
         self._layers = []
         self._debug = False
 
@@ -96,6 +106,17 @@ class Service(object):
         if not self._mapped:
             raise ValueError("Cannot run service without mapping all operations")
         self._app.run(**kwargs)
+
+    def handle(self, op_name, body):
+        # TODO: The entirety of operation.handle_request should be moved here.
+        #       At the same time revisit operation._wrap to see if it can be cleaned up
+        #       Serializers need to be hooked up here, and the bottle route in __init__
+        #         needs to pass request.body instead of request.json
+        try:
+            operation = self.operations[op_name]
+        except KeyError:
+            bottle.abort(404, "Unknown operation {}".format(op_name))
+        return handle_request(self, operation, operation._func, body)
 
 def parse_service(data):
     service = Service(parse_name(data))
