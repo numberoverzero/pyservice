@@ -1,5 +1,11 @@
 import pytest
-import pyservice
+
+from pyservice.service import Service
+from pyservice.common import ServiceException
+from pyservice.utils import (
+    validate_input,
+    validate_output
+)
 
 def build_context(input_json=None, output_json=None, func=None, input=None, output=None):
     service_json = {
@@ -10,7 +16,7 @@ def build_context(input_json=None, output_json=None, func=None, input=None, outp
             "output": list(output) if output else []
         }]
     }
-    service = pyservice.Service.from_json(service_json)
+    service = Service.from_json(service_json)
     operation = service.operations["func"]
     if func:
         service.operation(func)
@@ -36,7 +42,7 @@ def test_on_input_same_args():
     input = "abc"
 
     context = build_context(input_json=input_json, func=func, input=input)
-    pyservice.validate_input(context)
+    validate_input(context)
     assert dict(context["input"]) == dict(input_json)
 
 def test_on_input_without_wrapping():
@@ -49,8 +55,8 @@ def test_on_input_without_wrapping():
     input = "abc"
 
     context = build_context(input_json=input_json, input=input)
-    with pytest.raises(pyservice.ServiceException):
-        pyservice.validate_input(context)
+    with pytest.raises(ServiceException):
+        validate_input(context)
 
 def test_on_input_no_args():
     input_json = {}
@@ -61,7 +67,7 @@ def test_on_input_no_args():
     input = None
 
     context = build_context(input_json=input_json, func=func, input=input)
-    pyservice.validate_input(context)
+    validate_input(context)
     assert dict(context["input"]) == dict(input_json)
 
 def test_on_input_too_few_args():
@@ -75,10 +81,10 @@ def test_on_input_too_few_args():
     input = "ab"
 
     context = build_context(input_json=input_json, func=func, input=input)
-    with pytest.raises(pyservice.ServiceException):
-        pyservice.validate_input(context)
+    with pytest.raises(ServiceException):
+        validate_input(context)
 
-def test_on_input_too_many_args():
+def test_on_input_extra_args():
     input_json = {
         "a": "Hello",
         "b": "World"
@@ -90,7 +96,7 @@ def test_on_input_too_many_args():
     input = "a"
 
     context = build_context(input_json=input_json, func=func, input=input)
-    pyservice.validate_input(context)
+    validate_input(context)
 
 
 def test_on_input_wrong_args():
@@ -105,8 +111,8 @@ def test_on_input_wrong_args():
     input = "ab"
 
     context = build_context(input_json=input_json, func=func, input=input)
-    with pytest.raises(pyservice.ServiceException):
-        pyservice.validate_input(context)
+    with pytest.raises(ServiceException):
+        validate_input(context)
 
 def test_on_output_no_args():
     output_json = {}
@@ -117,7 +123,7 @@ def test_on_output_no_args():
     output = None
 
     context = build_context(output_json=output_json, func=func, output=output)
-    pyservice.validate_output(context)
+    validate_output(context)
     assert not context["output"]
 
 def test_on_output_too_few_args():
@@ -129,8 +135,8 @@ def test_on_output_too_few_args():
     output = "ab"
 
     context = build_context(output_json=output_json, func=func, output=output)
-    with pytest.raises(pyservice.ServiceException):
-        pyservice.validate_output(context)
+    with pytest.raises(ServiceException):
+        validate_output(context)
 
 def test_on_output_too_many_args():
     output_json = {
@@ -145,7 +151,7 @@ def test_on_output_too_many_args():
     output = "ab"
 
     context = build_context(output_json=output_json, func=func, output=output)
-    pyservice.validate_output(context)
+    validate_output(context)
 
 def test_on_output_single_string():
     output_json = {"a": "Hello"}
@@ -156,5 +162,5 @@ def test_on_output_single_string():
     output = "a"
 
     context = build_context(output_json=output_json, func=func, output=output)
-    pyservice.validate_output(context)
+    validate_output(context)
     assert context["output"] == {"a": "Hello"}
