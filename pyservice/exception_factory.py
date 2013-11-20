@@ -50,8 +50,24 @@ BUILTIN_EXCEPTIONS = [
 "ZeroDivisionError",
 ]
 
-def builtin_exception(name, *args):
-    ex_cls = __builtins__.get(name, None)
-    if ex_cls is None or name not in BUILTIN_EXCEPTIONS:
-        raise NameError("Exception '{}' is not defined".format(name))
-    return ex_cls(*args)
+__exceptions = {}
+
+class ExceptionFactory(object):
+    def __init__(self):
+        self._exceptions = {}
+
+    def _build_exception(self, name):
+        ex_cls = self._exceptions[name] = type(name, (Exception,), {})
+        return ex_cls
+
+    def exception(self, name, *args):
+        if name not in BUILTIN_EXCEPTIONS:
+            ex_cls = self._exceptions.get(name, None)
+            if not ex_cls:
+                ex_cls = self._build_exception(name)
+        else:
+            ex_cls = __builtins__.get(name, None)
+            # maybe the exception class was deleted? Who knows
+            if not ex_cls:
+                raise NameError("global name '{}' is not defined".format(name))
+        return ex_cls(*args)
