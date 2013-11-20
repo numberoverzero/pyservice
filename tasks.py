@@ -9,6 +9,7 @@ def clean():
     run("rm -rf .tox/")
     run("rm -rf dist/")
     run("rm -rf pyservice.egg-info/")
+    run("rm -rf *.pyc")
 
 @invoke.task('clean')
 def build():
