@@ -266,16 +266,16 @@ class Client(object):
         # Fallback to config
         # Default to http://localhost:8080
         schema = getattr(service, "schema", None)
-        schema = schema or getattr(config, "schema", None)
+        schema = schema or config.get("schema", None)
         schema = schema or "http"
 
         host = getattr(service, "host", None)
-        host = host or getattr(config, "host", None)
+        host = host or config.get("host", None)
         host = host or "localhost"
 
         port = getattr(service, "port", None)
-        port = port or getattr(config, "port", None)
-        port = port or "8080"
+        port = port or config.get("port", None)
+        port = port or 8080
 
         uri = {
             "schema": schema,
