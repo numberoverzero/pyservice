@@ -2,11 +2,11 @@ import json
 import webtest
 j = json.loads
 
-import pyservice
+from pyservice.service import parse_service
 
 def test_service_routing():
     data = j('{"name": "ServiceName", "operations": [{"name":"ConcatOperation", "input": ["a", "b"], "output": ["ab"]}]}')
-    service = pyservice.parse_service(data)
+    service = parse_service(data)
 
     @service.operation("ConcatOperation")
     def concat(a, b):
