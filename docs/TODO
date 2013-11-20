@@ -2,21 +2,10 @@ TODO
 ========================
 
 Project:
-    1) Refactor entire layout:
-        pyservice
-            |
-            |- __init__.py
-            |- service.py
-            |- client.py
-            |- description.py
-            |- validation.py
-            |- layer.py
-    2) Move to JSON-RPC 2.0
-    3) Refactor exceptions to live on client/service:
-        try:
-            print client.get_task(task_id)
-        except client.exceptions.UnknownTaskId as e:
-            print e
+    1) Refactor list <--> dict conversion
+        (currently lives in both Client and FunctionExecutor)
+    2) Refactor Service/Operation parsing (move to their classes?)
+    3) Move to JSON-RPC 2.0
 
 Documentation:
     docstrings for all top-level classes
@@ -53,10 +42,3 @@ Description file:
                 }
             ]
         }
-
-Client:
-    Move to
-
-Server:
-    Exceptions:
-        Testing (including nested layer catching)
