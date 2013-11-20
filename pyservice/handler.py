@@ -1,3 +1,4 @@
+from pyservice.serialize import JsonSerializer
 from pyservice.utils import (
     validate_input,
     validate_output,
@@ -5,14 +6,20 @@ from pyservice.utils import (
 )
 
 def handle(service, operation, body):
-    # TODO: Unpack body -> dict with a serializer
     # Move logic in handle_request to this method
     # (or helpers)
-    return handle_request(service, operation, operation._func, body)
 
+    # TODO: hadcoding json serializer for now
+    # This should be an arg passed into handle
+    serializer = JsonSerializer()
 
-#Moved from operation.py
-def handle_request(service, operation, func, input):
+    string_in = body
+    dict_in = serializer.deserialize(string_in, strict=False)
+    dict_out = _handle(service, operation, operation._func, dict_in)
+    string_out = serializer.deserialize(dict_out)
+    return string_out
+
+def _handle(service, operation, func, input):
     context = {
         "input": input,
         "output": {},
