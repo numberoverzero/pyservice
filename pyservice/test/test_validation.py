@@ -1,8 +1,7 @@
 import pytest
 
 from pyservice.service import Service
-from pyservice.common import ServiceException
-from pyservice.utils import (
+from pyservice.handler import (
     validate_input,
     validate_output
 )
@@ -55,7 +54,7 @@ def test_on_input_without_wrapping():
     input = "abc"
 
     context = build_context(input_json=input_json, input=input)
-    with pytest.raises(ServiceException):
+    with pytest.raises(ValueError):
         validate_input(context)
 
 def test_on_input_no_args():
@@ -81,7 +80,7 @@ def test_on_input_too_few_args():
     input = "ab"
 
     context = build_context(input_json=input_json, func=func, input=input)
-    with pytest.raises(ServiceException):
+    with pytest.raises(ValueError):
         validate_input(context)
 
 def test_on_input_extra_args():
@@ -111,7 +110,7 @@ def test_on_input_wrong_args():
     input = "ab"
 
     context = build_context(input_json=input_json, func=func, input=input)
-    with pytest.raises(ServiceException):
+    with pytest.raises(ValueError):
         validate_input(context)
 
 def test_on_output_no_args():
@@ -135,7 +134,7 @@ def test_on_output_too_few_args():
     output = "ab"
 
     context = build_context(output_json=output_json, func=func, output=output)
-    with pytest.raises(ServiceException):
+    with pytest.raises(ValueError):
         validate_output(context)
 
 def test_on_output_too_many_args():
