@@ -31,7 +31,7 @@ def validate_output(context):
 
 def validate_exception(context):
     '''Make sure the exception returned is whitelisted - otherwise throw a generic InteralException'''
-    exception = context["__exception"]
+    exception = context["exception"]
     service = context["service"]
 
     whitelisted = exception.__class__ in service.exceptions
@@ -39,7 +39,7 @@ def validate_exception(context):
 
     if not whitelisted and not debugging:
         # Blow away the exception
-        context["__exception"] = ServiceException()
+        context["exception"] = ServiceException()
 
 def parse_name(data):
     name = data["name"]

@@ -12,7 +12,6 @@ from pyservice.common import (
     RESERVED_SERVICE_KEYS
 )
 from pyservice.operation import parse_operation
-from pyservice.layer import Stack
 from pyservice import handler
 
 
@@ -35,7 +34,7 @@ class Service(object):
             operation = self.operations[operation]
         except KeyError:
             bottle.abort(404, "Unknown operation {}".format(operation))
-        return handler.handle(self, operation, bottle.request.body)
+        return handler.handle(self, operation, bottle.request.body.read().decode("utf-8"))
 
     @classmethod
     def from_json(cls, data):

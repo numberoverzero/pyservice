@@ -18,4 +18,4 @@ def test_service_routing():
     app = webtest.TestApp(service._app)
     response = app.post_json(route, input)
 
-    assert response.json == {"ab": "HelloWorld"}
+    assert j(response.body.decode("utf-8")) == j('{"ab": "HelloWorld"}')

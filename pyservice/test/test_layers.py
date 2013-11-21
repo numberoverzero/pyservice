@@ -5,7 +5,7 @@ from pyservice.layer import (
     Layer,
     Stack
 )
-from pyservice.operation import handle_request
+from pyservice.handler import handle
 
 j = json.loads
 
@@ -37,14 +37,16 @@ def test_layer_ordering():
     OrderingLayer(service, "first")
     OrderingLayer(service, "second")
 
-    assert not handle_request(service, operation, noop, {})
+    result = handle(service, operation, "{}")
+    assert not j(result)
     assert expected_order == actual_order
 
 def test_base_layer_does_nothing():
 
     service, operation, noop = noop_service()
     Layer(service)
-    assert not handle_request(service, operation, noop, {})
+    result = handle(service, operation, "{}")
+    assert not j(result)
 
 
 def test_stack_append_extend_pass_through():
@@ -78,11 +80,11 @@ def test_layer_raise_exception():
     def func():
         return None
 
-    result = handle_request(service, operation, func, {})
-    assert result == {
+    result = handle(service, operation, "{}")
+    assert j(result) == {
         "__exception": {
             "cls": "MyException",
-            "args": ('MyMessage',)
+            "args": ['MyMessage']
         }
     }
 
@@ -106,10 +108,10 @@ def test_layer_raise_unknown_exception():
     def func():
         return None
 
-    result = handle_request(service, operation, func, {})
-    assert result == {
+    result = handle(service, operation, "{}")
+    assert j(result) == {
         "__exception": {
             "cls": "ServiceException",
-            "args": ('Internal Error',)
+            "args": ['Internal Error']
         }
     }

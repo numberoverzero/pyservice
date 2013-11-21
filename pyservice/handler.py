@@ -25,6 +25,7 @@ def handle(service, operation, body):
 
         validate_output(context)
         result = context["output"]
+        return serializer.serialize(result)
     except Exception as exception:
         context["exception"] = exception
         validate_exception(context)
@@ -35,7 +36,6 @@ def handle(service, operation, body):
                 'args': exception.args
             }
         }
-    finally:
         try:
             return serializer.serialize(result)
         except Exception:
