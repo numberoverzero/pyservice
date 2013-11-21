@@ -11,6 +11,7 @@ def clean():
     run("rm -rf pyservice.egg-info/")
     run("find . -name '*.pyc' -delete")
     run("find . -name '__pycache__' -delete")
+    run("rm -f .coverage")
 
 @invoke.task('clean')
 def build():
