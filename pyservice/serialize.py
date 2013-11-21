@@ -1,6 +1,6 @@
 import json
 
-"""Service middleware expects the request/response context to be one
+"""Service layers expects the request/response context to be one
 dictionary - the pyservice framework makes extensive use of this format,
 and the layer interface is exclusively context-based.  This is great
 for JSON-like wire formats, but more work for others.
@@ -66,7 +66,8 @@ NOTE
 
 
 class JsonSerializer(object):
-    format = "JSON"
+    format = "json"
+    content_type = "application/json"
 
     def serialize(self, data, **kw):
         return json.dumps(data)
