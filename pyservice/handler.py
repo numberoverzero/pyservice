@@ -1,13 +1,8 @@
 import bottle
-from pyservice.serialize import JsonSerializer
 from pyservice.common import ServiceException
 from pyservice.layer import Stack
 
-def handle(service, operation, body):
-    # TODO: hardcoding json serializer for now
-    # This should be an arg passed into handle
-    serializer = JsonSerializer()
-
+def handle(service, operation, body, serializer):
     try:
         context = {
             "input": serializer.deserialize(body),

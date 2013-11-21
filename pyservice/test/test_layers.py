@@ -1,12 +1,14 @@
-import json
+
 
 from pyservice.service import parse_service
 from pyservice.layer import (
     Layer,
     Stack
 )
+from pyservice.serialize import JsonSerializer
 from pyservice.handler import handle
 
+import json
 j = json.loads
 
 def noop_service():
@@ -37,7 +39,7 @@ def test_layer_ordering():
     OrderingLayer(service, "first")
     OrderingLayer(service, "second")
 
-    result = handle(service, operation, "{}")
+    result = handle(service, operation, "{}", JsonSerializer())
     assert not j(result)
     assert expected_order == actual_order
 
@@ -45,7 +47,7 @@ def test_base_layer_does_nothing():
 
     service, operation, noop = noop_service()
     Layer(service)
-    result = handle(service, operation, "{}")
+    result = handle(service, operation, "{}", JsonSerializer())
     assert not j(result)
 
 
@@ -80,7 +82,7 @@ def test_layer_raise_exception():
     def func():
         return None
 
-    result = handle(service, operation, "{}")
+    result = handle(service, operation, "{}", JsonSerializer())
     assert j(result) == {
         "__exception": {
             "cls": "MyException",
@@ -108,7 +110,7 @@ def test_layer_raise_unknown_exception():
     def func():
         return None
 
-    result = handle(service, operation, "{}")
+    result = handle(service, operation, "{}", JsonSerializer())
     assert j(result) == {
         "__exception": {
             "cls": "ServiceException",

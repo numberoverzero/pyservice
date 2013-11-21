@@ -11,6 +11,7 @@ from pyservice.common import (
     OP_ALREADY_REGISTERED,
     RESERVED_SERVICE_KEYS
 )
+from pyservice.serialize import JsonSerializer
 from pyservice.operation import parse_operation
 from pyservice import handler
 
@@ -34,7 +35,14 @@ class Service(object):
             operation = self.operations[operation]
         except KeyError:
             bottle.abort(404, "Unknown operation {}".format(operation))
-        return handler.handle(self, operation, bottle.request.body.read().decode("utf-8"))
+        body = bottle.request.body.read().decode("utf-8")
+
+        # TODO: hardcoding json serializer for now
+        # this should be based on the route
+        # (which will eventually include wire format)
+        serializer = JsonSerializer()
+
+        return handler.handle(self, operation, body, serializer)
 
     @classmethod
     def from_json(cls, data):
