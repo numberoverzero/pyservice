@@ -33,6 +33,15 @@ class Description(object):
     def __init__(self, json_obj):
         self.__obj = dict(json_obj)
 
+        # If exceptions, operations, or operation in/out
+        # are missing, fill them in with empty lists
+        def default_list(obj, field):
+            if field not in obj:
+                obj[field] = []
+            return obj[field]
+        default_list(self.__obj, "exceptions")
+        default_list(self.__obj, "operations")
+
     @classmethod
     def from_json(self, data):
         return Description(data)
@@ -54,9 +63,9 @@ class Description(object):
 
     @cached_property
     def operations(self):
-        obj_operations = self.__obj.get("operations", [])
+        obj_operations = self.__obj["operations"]
         return [op["name"] for op in obj_operations]
 
     @cached_property
     def exceptions(self):
-        return self.__obj.get("exceptions", [])
+        return self.__obj["exceptions"]

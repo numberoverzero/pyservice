@@ -75,6 +75,12 @@ def test_description_from_file():
         file_obj.seek(0)
         Description.from_file(file_obj.name)
 
+def test_description_loads_defaults():
+    valid = """{"name": "service"}"""
+    description = Description.from_string(valid)
+    assert [] == description.operations
+    assert [] == description.exceptions
+
 def test_description_name():
     description = Description.from_string(valid_description_string())
     assert "service" == description.name
