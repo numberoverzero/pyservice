@@ -81,3 +81,8 @@ class Description(object):
         for operation_obj in operations_obj:
             if operation_obj["name"] == op_name:
                 return operation_obj
+
+    @cached_property
+    def metadata(self):
+        blacklist = ["name", "operations", "exceptions"]
+        return parse_metadata(self.__obj, blacklist)

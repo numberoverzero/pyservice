@@ -76,35 +76,35 @@ def test_description_from_file():
         Description.from_file(file_obj.name)
 
 def test_description_loads_defaults():
-    valid = """{"name": "service"}"""
-    description = Description.from_string(valid)
+    string = """{"name": "service"}"""
+    description = Description.from_string(string)
     assert [] == description.operations
     assert [] == description.exceptions
 
 def test_description_loads_operation_defaults():
-    valid = """{
+    string = """{
         "name": "service",
         "operations": [{"name": "operation1"}]
     }"""
-    description = Description.from_string(valid)
+    description = Description.from_string(string)
     operation = description.operation("operation1")
     assert [] == operation["input"]
     assert [] == operation["output"]
 
 def test_description_operation():
-    valid = """{
+    string = """{
         "name": "service",
         "operations": [{"name": "operation1"}]
     }"""
-    description = Description.from_string(valid)
+    description = Description.from_string(string)
     description.operation("operation1")
 
 def test_description_unknown_operation():
-    valid = """{
+    string = """{
         "name": "service",
         "operations": [{"name": "operation1"}]
     }"""
-    description = Description.from_string(valid)
+    description = Description.from_string(string)
     with pytest.raises(KeyError):
         description.operation("operation2")
 
@@ -167,6 +167,27 @@ def test_description_exceptions_empty():
     string = """{"name": "service"}"""
     description = Description.from_string(string)
     assert [] == description.exceptions
+
+def test_description_metadata_empty():
+    string = "{}"
+    description = Description.from_string(string)
+    assert {} == description.metadata
+
+def test_description_metadata_multiple_nested():
+    string = """{
+        "meta1": {
+            "inner_meta1": "value1"
+        },
+        "meta2": [
+            "inner_meta2"
+        ]
+    }"""
+    description = Description.from_string(string)
+    assert json.loads(string.replace('\n', '')) == description.metadata
+
+def test_description_metadata_blacklist():
+    description = Description.from_string(valid_description_string())
+    assert {} == description.metadata
 
 #===========================
 #
