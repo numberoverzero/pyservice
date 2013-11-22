@@ -1,5 +1,3 @@
-import bottle
-
 from pyservice.utils import (
     validate_name,
     parse_metadata,

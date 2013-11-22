@@ -7,6 +7,8 @@ from pyservice.common import (
     ServiceException
 )
 
+from pyservice import utils
+
 
 class Client(object):
     def __init__(self, service, **config):
@@ -50,32 +52,31 @@ class Client(object):
 
     def _call_operation(self, operation, *args):
         uri = self._uri.format(operation=operation)
-        data = self._pack_params(operation, *args)
+
+        signature = self._service.operations[operation].input
+        dict_ = utils.to_dict(signature, *args)
         headers = {'Content-type': 'application/json'}
 
-        response = requests.post(uri, data=json.dumps(data), headers=headers)
-        result = self._unpack_result(operation, response.json())
+        response = requests.post(uri, data=json.dumps(dict_), headers=headers)
+        response = response.json()
+
+        # Handle exception
+        self._check_exception(response)
+
+        signature = self._service.operations[operation].output
+        result = utils.to_list(signature, response)
+
+        if not signature:
+            return None
+        if len(signature) == 1:
+            return result[0]
         return result
 
-    def _pack_params(self, operation, *args):
-        # Verify args match function signature
-        func_args = self._service.operations[operation].input
-        if args and not func_args:
-            raise ClientException("Passed args '{}' but not expecting any".format(args))
-        return dict(zip(func_args, args))
-
-    def _unpack_result(self, operation, response):
-        func_results = self._service.operations[operation].output
+    def _check_exception(self, response):
         if len(response) == 1:
             if "__exception" in response:
                 exception = response["__exception"]
                 self._throw_exception(exception["cls"], *exception["args"])
-            return response[func_results[0]]
-        if len(func_results) != len(response):
-            raise ServiceException("Expected {} results, got {}".format(len(response), len(func_results)))
-        if not func_results:
-            return None
-        return [response[key] for key in func_results]
 
     def _throw_exception(self, exception, *args):
         ex_type = exception.encode('ascii', 'ignore')

@@ -15,7 +15,6 @@ def handle(service, operation, body, serializer):
         stack.append(FunctionExecutor(operation, operation._func))
         stack.handle_request(context)
 
-        validate_output(context)
         result = context["output"]
         return serializer.serialize(result)
     except Exception as exception:
@@ -38,24 +37,6 @@ def handle(service, operation, body, serializer):
         except Exception:
             bottle.abort(500, "Internal Error")
 
-def validate_input(context):
-    '''Make sure input has at least the required fields for mapping to a function'''
-    json_input = set(context["input"])
-    op_args = set(context["operation"].input)
-    if not json_input.issuperset(op_args):
-        msg = 'Input "{}" does not contain required params "{}"'
-        raise ValueError(msg.format(context["input"], op_args))
-    if context["operation"]._func is None:
-        raise ValueError("No wrapped function to order input args by!")
-
-def validate_output(context):
-    '''Make sure the expected fields are present in the output'''
-    json_output = set(context["output"])
-    op_returns = set(context["operation"].output)
-    if not json_output.issuperset(op_returns):
-        msg = 'Output "{}" does not contain required values "{}"'
-        raise ValueError(msg.format(context["output"], op_returns))
-
 def validate_exception(context):
     '''Make sure the exception returned is whitelisted - otherwise throw a generic InteralException'''
     exception = context["exception"]
@@ -75,12 +56,12 @@ class FunctionExecutor(object):
     def handle_request(self, context, next):
         dict_ = context["input"]
         signature = self.operation._argnames
-        args = utils.to_list(dict_, signature)
+        args = utils.to_list(signature, dict_)
 
         result = self.func(*args)
 
         signature = self.operation.output
-        dict_ = utils.to_dict(result, signature)
+        dict_ = utils.to_dict(signature, result)
         context["output"].update(dict_)
 
         next.handle_request(context)

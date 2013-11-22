@@ -21,7 +21,7 @@ def parse_metadata(obj, data, blacklist):
         if key not in blacklist:
             setattr(obj, key, value)
 
-def to_list(dict_, signature):
+def to_list(signature, dict_):
     '''
     Convert dict -> list according to signature
     raises KeyError if data doesn't contain AT LEAST
@@ -36,7 +36,7 @@ def to_list(dict_, signature):
     # extra fields
     return [dict_[key] for key in signature]
 
-def to_dict(list_, signature):
+def to_dict(signature, *list_):
     '''
     Convert list_ -> dict according to signature
     raises KeyError if args doesn't contain the exact number of fields
@@ -48,9 +48,9 @@ def to_dict(list_, signature):
     # Special case single return value,
     # in case the return value is an iterable
     # (but represents one "thing")
-    if len(signature) == 1:
-        key = signature[0]
-        return {key: list_}
+    #if len(signature) == 1:
+    #    key = signature[0]
+    #    return {key: list_}
 
     if len(list_) != len(signature):
         raise ValueError("Output '{}' did not match signature '{}'".format(list_, signature))
