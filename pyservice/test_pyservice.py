@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from pyservice.exception_factory import ExceptionFactory
 from pyservice.serialize import JsonSerializer, to_list, to_dict
 from pyservice.layer import Layer, Stack
+from pyservice.util import cached_property
 
 #===========================
 #
@@ -296,7 +297,58 @@ def test_stack_execution_nesting():
 
 #===========================
 #
-# Testing helpers
+# cached_property
+#
+#===========================
+
+def test_cached_property_get_invoked_once():
+    cls = cached_property_class()
+
+    # Class definition shouldn't invoke
+    assert cls.gets == 0
+
+    # Instantiation shouldn't invoke
+    obj = cls()
+    assert cls.gets == 0
+
+    # First invocation, cache miss
+    foo = obj.foo
+    assert foo == "foo"
+    assert cls.gets == 1
+
+    # Second invocation, cache hit
+    foo = obj.foo
+    assert foo == "foo"
+    assert cls.gets == 1
+
+def test_cached_property_set():
+    cls = cached_property_class()
+    obj = cls()
+
+    with pytest.raises(AttributeError):
+        obj.foo = None
+    assert cls.sets == 0
+
+def test_cached_property_del():
+    cls = cached_property_class()
+    obj = cls()
+
+    with pytest.raises(AttributeError):
+        del obj.foo
+    assert cls.dels == 0
+
+def test_cached_property_get_no_obj():
+    cp = cached_property()
+    assert cp == cp.__get__(None)
+
+def test_cached_property_get_no_fget():
+    cp = cached_property(None)
+    with pytest.raises(AttributeError):
+        cp.__get__(True)
+
+#===========================
+#
+# Helpers for testing
 #
 #===========================
 
@@ -312,3 +364,23 @@ def removed_global(name):
 
     # Put the object back so other tests don't break
     setattr(builtins, name, obj)
+
+def cached_property_class():
+    class Class(object):
+        gets = 0
+        sets = 0
+        dels = 0
+
+        @cached_property
+        def foo(self):
+            Class.gets += 1
+            return "foo"
+
+        @foo.setter
+        def foo(self, value):
+            Class.sets += 1
+
+        @foo.deleter
+        def foo(self):
+            Class.dels += 1
+    return Class
