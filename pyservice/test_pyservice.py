@@ -3,6 +3,13 @@ import pytest
 from contextlib import contextmanager
 
 from pyservice.exception_factory import ExceptionFactory
+from pyservice.serialize import JsonSerializer
+
+#===========================
+#
+# Exception Factory
+#
+#===========================
 
 def test_builtin_exception():
     name = "TypeError"
@@ -21,7 +28,6 @@ def test_builtin_shadowing():
     assert None.__class__ is not exception.__class__
     assert args == list(exception.args)
 
-
 def test_custom_exception():
     name = "CustomException"
     args = [1, 2, 3]
@@ -34,7 +40,7 @@ def test_custom_exception():
     assert issubclass(exception.__class__, Exception)
     assert exception.__class__ is another_exception.__class__
 
-def test_different_factories():
+def test_different_exception_factories():
     name = "CustomException"
     args = [1, 2, 3]
     other_args = [4, 5, 6]
@@ -56,6 +62,47 @@ def test_missing_builtin():
     with removed_global(name):
         with pytest.raises(RealNameError):
             ExceptionFactory().exception(name, *args)
+
+#===========================
+#
+# Serializers
+#
+#===========================
+
+def test_bad_deserialize():
+    string = "{Malformed ] JSON"
+    serializer = JsonSerializer()
+
+    with pytest.raises(ValueError):
+        serializer.deserialize(string)
+
+def test_good_deserialize():
+    string = '{"good": ["json"]}'
+    serializer = JsonSerializer()
+    serializer.deserialize(string)
+
+def test_bad_serialize():
+    # json can't serialize types
+    data = {"bad": type}
+    serializer = JsonSerializer()
+
+    with pytest.raises(TypeError):
+        serializer.serialize(data)
+
+def test_good_serialize():
+    data = {"good": ["json"]}
+    expected = '{"good": ["json"]}'
+
+    serializer = JsonSerializer()
+    actual = serializer.serialize(data)
+
+    assert expected == actual
+
+#===========================
+#
+# Testing helpers
+#
+#===========================
 
 @contextmanager
 def removed_global(name):

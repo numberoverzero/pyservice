@@ -33,5 +33,3 @@ class ClientException(Exception):
     def __init__(self, *args):
         args = args or [self.default_message]
         super(ClientException, self).__init__(*args)
-
-
