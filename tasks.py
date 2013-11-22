@@ -21,3 +21,7 @@ def build():
 @invoke.task('clean')
 def test():
     run('tox')
+
+@invoke.task('clean')
+def coverage():
+    run('tox -e py27')
