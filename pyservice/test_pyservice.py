@@ -19,6 +19,13 @@ def test_builtin_exception():
     assert TypeError is exception.__class__
     assert args == list(exception.args)
 
+def test_same_exception_class():
+    name = "MyException"
+    factory = ExceptionFactory()
+    ex_cls1 = factory.exception_cls(name)
+    ex_cls2 = factory.exception_cls(name)
+    assert ex_cls1 is ex_cls2
+
 def test_builtin_shadowing():
     name = "False"
     args = [1, 2, 3]
@@ -31,14 +38,11 @@ def test_builtin_shadowing():
 def test_custom_exception():
     name = "CustomException"
     args = [1, 2, 3]
-    other_args = [4, 5, 6]
 
     factory = ExceptionFactory()
     exception = factory.exception(name, *args)
-    another_exception = factory.exception(name, *other_args)
     assert name == exception.__class__.__name__
     assert issubclass(exception.__class__, Exception)
-    assert exception.__class__ is another_exception.__class__
 
 def test_different_exception_factories():
     name = "CustomException"

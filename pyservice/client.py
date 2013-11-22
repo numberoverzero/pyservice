@@ -3,7 +3,6 @@ import requests
 
 from pyservice.service import parse_service
 from pyservice.common import (
-    ClientException,
     ServiceException
 )
 

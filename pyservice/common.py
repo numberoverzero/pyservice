@@ -25,11 +25,3 @@ class ServiceException(Exception):
     def __init__(self, *args):
         args = args or [self.default_message]
         super(ServiceException, self).__init__(*args)
-
-
-class ClientException(Exception):
-    '''Represents an error made by the Client when calling an operation'''
-    default_message = "Invalid call"
-    def __init__(self, *args):
-        args = args or [self.default_message]
-        super(ClientException, self).__init__(*args)

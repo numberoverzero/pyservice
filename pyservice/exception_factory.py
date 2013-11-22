@@ -62,6 +62,9 @@ class ExceptionFactory(object):
         return ex_cls
 
     def exception(self, name, *args):
+        return self.exception_cls(name)(*args)
+
+    def exception_cls(self, name):
         if name not in BUILTIN_EXCEPTIONS:
             ex_cls = self._exceptions.get(name, None)
             if not ex_cls:
@@ -71,4 +74,4 @@ class ExceptionFactory(object):
             # maybe the exception class was deleted? Who knows
             if not ex_cls:
                 raise NameError("global name '{}' is not defined".format(name))
-        return ex_cls(*args)
+        return ex_cls
