@@ -396,6 +396,22 @@ def test_cached_decorator_no_collisions():
     # Different items cached
     assert 2 == len(cls.calls)
 
+def test_cached_decorator_no_cache_on_throw():
+    # This is probably an obvious case, but I always forget
+    # how it works
+
+    @cached
+    def get():
+        raise KeyError()
+
+    # Doesn't cache since Exception occurs before assignemnt
+    with pytest.raises(KeyError):
+        get()
+
+    # Still not cached
+    with pytest.raises(KeyError):
+        get()
+
 
 #===========================
 #
