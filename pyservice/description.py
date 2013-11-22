@@ -1,5 +1,7 @@
 import re
 import six
+import json
+from pyservice.util import cached, cached_property
 
 # Most names can only be \w*,
 # with the special restriction that the
@@ -18,3 +20,30 @@ def parse_metadata(data, blacklist=None):
         if key not in blacklist:
             metadata[key] = value
     return metadata
+
+class Description(object):
+    '''
+    Read-only.  Properties are cached.
+
+    Wrapper around a json-like object
+      which provides helpers for inspecting
+      expected attributes, such as input,
+      output, and operations.
+    '''
+    def __init__(self, json_obj):
+        self.__obj = dict(json_obj)
+
+    @classmethod
+    def from_json(self, data):
+        return Description(data)
+
+    @classmethod
+    def from_string(self, string):
+        data = json.loads(string.replace('\n',''))
+        return Description.from_json(data)
+
+    @classmethod
+    def from_file(self, filename):
+        with open(filename) as file_obj:
+            string = file_obj.read()
+            return Description.from_string(string)

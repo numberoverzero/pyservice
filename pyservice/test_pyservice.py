@@ -1,10 +1,12 @@
 import six
+import json
 import pytest
+import tempfile
 from contextlib import contextmanager
 from collections import defaultdict
 
 from pyservice.exception_factory import ExceptionFactory
-from pyservice.description import validate_name, parse_metadata
+from pyservice.description import validate_name, parse_metadata, Description
 from pyservice.layer import Layer, Stack
 from pyservice.serialize import JsonSerializer, to_list, to_dict
 from pyservice.util import cached, cached_property
@@ -58,6 +60,20 @@ def test_parse_metadata_all_blacklisted():
     }
     blacklist = ["key", "other_key"]
     assert {} == parse_metadata(data, blacklist)
+
+def test_description_from_json():
+    data = json.loads(valid_description_string().replace('\n', ''))
+    Description.from_json(data)
+
+def test_description_from_string():
+    string = valid_description_string()
+    Description.from_string(string)
+
+def test_description_from_file():
+    with tempfile.NamedTemporaryFile(mode='w+') as file_obj:
+        file_obj.write(valid_description_string())
+        file_obj.seek(0)
+        Description.from_file(file_obj.name)
 
 #===========================
 #
@@ -526,3 +542,28 @@ def cached_decorator_class():
             Class.calls[data] += 1
             return data
     return Class
+
+def valid_description_string():
+    return """
+    {
+        "name": "service",
+        "operations": [
+            {
+                "name": "operation1",
+                "input": ["arg1", "arg2"],
+                "output": []
+            },
+            {
+                "name": "operation2",
+                "input": ["arg1"],
+                "output": ["value1"]
+            },
+            {
+                "name": "operation3",
+                "input": [],
+                "output": ["value1", "value2"]
+            }
+        ],
+        "exceptions": ["exception1", "exception2"]
+    }
+    """
