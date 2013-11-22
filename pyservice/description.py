@@ -21,7 +21,7 @@ def parse_metadata(data, blacklist=None):
             metadata[key] = value
     return metadata
 
-class Description(object):
+class ServiceDescription(object):
     '''
     Read-only.  Properties are cached.
 
