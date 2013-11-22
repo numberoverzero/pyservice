@@ -75,6 +75,66 @@ def test_description_from_file():
         file_obj.seek(0)
         Description.from_file(file_obj.name)
 
+def test_description_name():
+    description = Description.from_string(valid_description_string())
+    assert "service" == description.name
+
+def test_invalid_description_name_raises():
+    invalid_string = '{}'
+    description = Description.from_string(invalid_string)
+
+    with pytest.raises(KeyError):
+        description.name
+
+def test_description_operations():
+    string = """{
+        "name": "service",
+        "operations": [
+            {"name": "operation1"},
+            {"name": "operation2"},
+            {"name": "operation3"}
+        ]
+    }"""
+    description = Description.from_string(string)
+    assert ["operation1", "operation2", "operation3"] == description.operations
+
+def test_description_operations_empty():
+    string = """{
+        "name": "service",
+        "operations": []
+    }"""
+    description = Description.from_string(string)
+    assert [] == description.operations
+
+    string = """{"name": "service"}"""
+    description = Description.from_string(string)
+    assert [] == description.operations
+
+def test_description_exceptions():
+    string = """{
+        "name": "service",
+        "exceptions": [
+            "exception1",
+            "exception2",
+            "exception3"
+        ]
+    }"""
+    description = Description.from_string(string)
+    assert ["exception1", "exception2", "exception3"] == description.exceptions
+
+
+def test_description_exceptions_empty():
+    string = """{
+        "name": "service",
+        "exceptions": []
+    }"""
+    description = Description.from_string(string)
+    assert [] == description.exceptions
+
+    string = """{"name": "service"}"""
+    description = Description.from_string(string)
+    assert [] == description.exceptions
+
 #===========================
 #
 # Exception Factory

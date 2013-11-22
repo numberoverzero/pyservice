@@ -47,3 +47,16 @@ class Description(object):
         with open(filename) as file_obj:
             string = file_obj.read()
             return Description.from_string(string)
+
+    @cached_property
+    def name(self):
+        return self.__obj["name"]
+
+    @cached_property
+    def operations(self):
+        obj_operations = self.__obj.get("operations", [])
+        return [op["name"] for op in obj_operations]
+
+    @cached_property
+    def exceptions(self):
+        return self.__obj.get("exceptions", [])
