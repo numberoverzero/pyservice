@@ -172,6 +172,59 @@ def test_to_list_multiple_fields_extra():
 #
 #===========================
 
+def test_to_dict_no_signature_exact():
+    signature = []
+    data = []
+
+    assert {} == to_dict(signature, data)
+
+def test_to_dict_no_signature_extra():
+    signature = []
+    data = ["extra"]
+
+    with pytest.raises(ValueError):
+        to_dict(signature, data)
+
+def test_to_dict_one_field_no_data():
+    signature = ["field"]
+    data = []
+
+    with pytest.raises(ValueError):
+        to_dict(signature, data)
+
+def test_to_dict_one_field_exact():
+    signature = ["field"]
+    data = ["value"]
+
+    assert {"field": "value"} == to_dict(signature, data)
+
+def test_to_dict_one_field_extra():
+    signature = ["field"]
+    data = ["value", "extra"]
+
+    with pytest.raises(ValueError):
+        to_dict(signature, data)
+
+def test_to_dict_multiple_fields_missing_data():
+    signature = ["field1", "field2"]
+    data = ["value"]
+
+    with pytest.raises(ValueError):
+        to_dict(signature, data)
+
+def test_to_dict_multiple_fields_exact():
+    signature = ["field1", "field2"]
+    data = ["value1", "value2"]
+
+    assert {"field1": "value1", "field2": "value2"} == to_dict(signature, data)
+
+def test_to_dict_multiple_fields_extra():
+    signature = ["field1", "field2"]
+    data = ["value1", "value2", "value3"]
+
+    with pytest.raises(ValueError):
+        to_dict(signature, data)
+
 #===========================
 #
 # Layers
