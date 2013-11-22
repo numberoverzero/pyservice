@@ -4,7 +4,7 @@ from contextlib import contextmanager
 
 from pyservice.exception_factory import ExceptionFactory
 from pyservice.serialize import JsonSerializer
-from pyservice.layer import Layer
+from pyservice.layer import Layer, Stack
 
 #===========================
 #
@@ -131,6 +131,46 @@ def test_layer_calls_next():
     layer = Layer()
     layer.handle_request(context, next)
     assert Callable.called
+
+#===========================
+#
+# Stack
+#
+#===========================
+
+def test_empty_stack():
+    stack = Stack()
+    stack.handle_request({})
+
+def test_stack_executes_once():
+    class CountLayer(object):
+        count = 0
+        def handle_request(self, context, next):
+            CountLayer.count += 1
+
+    layer = CountLayer()
+    stack = Stack([layer])
+    stack.handle_request({})
+    stack.handle_request({})
+
+    assert CountLayer.count == 1
+
+def test_stack_execution_nesting():
+    class Nested(object):
+        order = []
+        def handle_request(self, context, next):
+            Nested.order.append(self)
+            next.handle_request(context)
+            Nested.order.append(self)
+
+    layer1 = Nested()
+    layer2 = Nested()
+    layers = [layer1, layer2]
+
+    stack = Stack(layers)
+    stack.handle_request({})
+
+    assert Nested.order == [layer1, layer2, layer2, layer1]
 
 
 #===========================
