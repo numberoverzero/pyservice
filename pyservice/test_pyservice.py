@@ -81,6 +81,33 @@ def test_description_loads_defaults():
     assert [] == description.operations
     assert [] == description.exceptions
 
+def test_description_loads_operation_defaults():
+    valid = """{
+        "name": "service",
+        "operations": [{"name": "operation1"}]
+    }"""
+    description = Description.from_string(valid)
+    operation = description.operation("operation1")
+    assert [] == operation["input"]
+    assert [] == operation["output"]
+
+def test_description_operation():
+    valid = """{
+        "name": "service",
+        "operations": [{"name": "operation1"}]
+    }"""
+    description = Description.from_string(valid)
+    description.operation("operation1")
+
+def test_description_unknown_operation():
+    valid = """{
+        "name": "service",
+        "operations": [{"name": "operation1"}]
+    }"""
+    description = Description.from_string(valid)
+    with pytest.raises(KeyError):
+        description.operation("operation2")
+
 def test_description_name():
     description = Description.from_string(valid_description_string())
     assert "service" == description.name

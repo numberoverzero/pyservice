@@ -40,7 +40,10 @@ class Description(object):
                 obj[field] = []
             return obj[field]
         default_list(self.__obj, "exceptions")
-        default_list(self.__obj, "operations")
+        ops = default_list(self.__obj, "operations")
+        for op in ops:
+            default_list(op, "input")
+            default_list(op, "output")
 
     @classmethod
     def from_json(self, data):
@@ -69,3 +72,12 @@ class Description(object):
     @cached_property
     def exceptions(self):
         return self.__obj["exceptions"]
+
+    @cached
+    def operation(self, op_name):
+        if op_name not in self.operations:
+            raise KeyError("Unknown operation '{}'".format(op_name))
+        operations_obj = self.__obj["operations"]
+        for operation_obj in operations_obj:
+            if operation_obj["name"] == op_name:
+                return operation_obj
