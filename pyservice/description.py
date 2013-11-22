@@ -10,13 +10,11 @@ def validate_name(name):
     if not NAME_RE.search(name):
         raise ValueError("Invalid name: '{}'".format(name))
 
-def parse_name(data):
-    name = data["name"]
-    validate_name(name)
-    return name
-
-def parse_metadata(obj, data, blacklist):
+def parse_metadata(data, blacklist=None):
+    metadata = {}
+    blacklist = blacklist or []
     for key, value in six.iteritems(data):
         validate_name(key)
         if key not in blacklist:
-            setattr(obj, key, value)
+            metadata[key] = value
+    return metadata

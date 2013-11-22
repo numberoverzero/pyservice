@@ -4,9 +4,60 @@ from contextlib import contextmanager
 from collections import defaultdict
 
 from pyservice.exception_factory import ExceptionFactory
-from pyservice.serialize import JsonSerializer, to_list, to_dict
+from pyservice.description import validate_name, parse_metadata
 from pyservice.layer import Layer, Stack
+from pyservice.serialize import JsonSerializer, to_list, to_dict
 from pyservice.util import cached, cached_property
+
+#===========================
+#
+# Description
+#
+#===========================
+
+def test_validate_name():
+    valid_names = [
+        'b', 'B', 'contains_UNDERSCORES', 'trailing_'
+    ]
+    invalid_names = [
+        '_', '_name', 'sy.mbol', '$wat', 'sp ace'
+    ]
+    for name in valid_names:
+        validate_name(name)
+    for name in invalid_names:
+        with pytest.raises(ValueError):
+            validate_name(name)
+
+def test_parse_metadata_invalid_name():
+    data = {
+        "_invalid": "value"
+    }
+    with pytest.raises(ValueError):
+        parse_metadata(data)
+
+def test_parse_metadata_no_blacklist():
+    data = {
+        "foo": "value",
+        "list": [""],
+        "object": {"_nested_keys": "aren't validated"}
+    }
+    assert data == parse_metadata(data)
+
+def test_parse_metadata_partial_blacklist():
+    data = {
+        "key": "not reserved",
+        "other_key": ["also reserved"]
+    }
+    blacklist = ["other_key"]
+    assert {"key": "not reserved"} == parse_metadata(data, blacklist)
+
+def test_parse_metadata_all_blacklisted():
+    data = {
+        "key": "reserved",
+        "other_key": ["also reserved"]
+    }
+    blacklist = ["key", "other_key"]
+    assert {} == parse_metadata(data, blacklist)
 
 #===========================
 #
