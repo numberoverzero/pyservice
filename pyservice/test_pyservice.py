@@ -3,7 +3,7 @@ import pytest
 from contextlib import contextmanager
 
 from pyservice.exception_factory import ExceptionFactory
-from pyservice.serialize import JsonSerializer
+from pyservice.serialize import JsonSerializer, to_list, to_dict
 from pyservice.layer import Layer, Stack
 
 #===========================
@@ -105,6 +105,75 @@ def test_good_serialize():
 
 #===========================
 #
+# dict --> list conversion
+#
+#===========================
+
+def test_to_list_no_signature_exact():
+    signature = []
+    data = {}
+
+    assert [] == to_list(signature, data)
+
+def test_to_list_no_signature_extra():
+    signature = []
+    data = {"extra": "field"}
+
+    assert [] == to_list(signature, data)
+
+def test_to_list_one_field_no_data():
+    signature = ["field"]
+    data = {}
+
+    with pytest.raises(KeyError):
+        to_list(signature, data)
+
+def test_to_list_one_field_exact():
+    signature = ["field"]
+    data = {"field": "value"}
+
+    assert ["value"] == to_list(signature, data)
+
+def test_to_list_one_field_extra():
+    signature = ["field"]
+    data = {"field": "value", "extra": "extra"}
+
+    assert ["value"] == to_list(signature, data)
+
+def test_to_list_multiple_fields_missing_data():
+    signature = ["field1", "field2"]
+    data = {"field1": "value"}
+
+    with pytest.raises(KeyError):
+        to_list(signature, data)
+
+def test_to_list_multiple_fields_wrong_data():
+    signature = ["field1", "field2"]
+    data = {"wrong_field1": "value", "wrong_field2": "value"}
+
+    with pytest.raises(KeyError):
+        to_list(signature, data)
+
+def test_to_list_multiple_fields_exact():
+    signature = ["field1", "field2"]
+    data = {"field1": "value1", "field2": "value2"}
+
+    assert ["value1", "value2"] == to_list(signature, data)
+
+def test_to_list_multiple_fields_extra():
+    signature = ["field1", "field2"]
+    data = {"field1": "value1", "extra": "extra", "field2": "value2"}
+
+    assert ["value1", "value2"] == to_list(signature, data)
+
+#===========================
+#
+# list --> dict conversion
+#
+#===========================
+
+#===========================
+#
 # Layers
 #
 #===========================
@@ -171,7 +240,6 @@ def test_stack_execution_nesting():
     stack.handle_request({})
 
     assert Nested.order == [layer1, layer2, layer2, layer1]
-
 
 #===========================
 #

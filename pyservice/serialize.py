@@ -1,3 +1,4 @@
+import six
 import json
 
 """Service layers expects the request/response context to be one
@@ -74,3 +75,29 @@ class JsonSerializer(object):
 
     def deserialize(self, string, **kw):
         return json.loads(string)
+
+def to_list(signature, data):
+    '''
+    Convert data -> list according to signature
+    raises KeyError if data doesn't contain AT LEAST
+        the fields required from signature
+
+    signature must be a list.
+    data must be a dict-like object
+    '''
+    # No validation needed - raises KeyError if a
+    #     required field is missing
+    return [data[key] for key in signature]
+
+def to_dict(signature, data):
+    '''
+    Convert data -> dict according to signature
+    raises KeyError if data doesn't contain the EXACT number of fields
+
+    signature must be a list.
+    data must be iterable.
+    '''
+    if len(data) != len(signature):
+        raise ValueError("Output '{}' did not match signature '{}'".format(data, signature))
+
+    return dict(six.moves.zip(signature, data))
