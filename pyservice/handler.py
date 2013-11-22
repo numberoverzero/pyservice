@@ -1,6 +1,7 @@
 import bottle
 from pyservice.common import ServiceException
 from pyservice.layer import Stack
+from pyservice import utils
 
 def handle(service, operation, body, serializer):
     try:
@@ -72,34 +73,14 @@ class FunctionExecutor(object):
         self.func = func
 
     def handle_request(self, context, next):
-        validate_input(context)
-        data = context["input"]
-        args = [data[argname] for argname in self.operation._argnames]
+        dict_ = context["input"]
+        signature = self.operation._argnames
+        args = utils.to_list(dict_, signature)
 
         result = self.func(*args)
-        self.map_output(result, context)
+
+        signature = self.operation.output
+        dict_ = utils.to_dict(result, signature)
+        context["output"].update(dict_)
+
         next.handle_request(context)
-
-    def map_output(self, result, context):
-        # TODO: This needs to be refactored to a common location
-        #       so that Client can use it for unpacking operation output
-        '''
-        Using the operation's description, map result fields to
-        context["output"]
-        '''
-        output_keys = context["operation"].output
-
-        # No output expected
-        if len(output_keys) == 0:
-            return
-
-        # One value - assume that even objs with an __iter__
-        # method represent one value (such as strings)
-        if len(output_keys) == 1:
-            result = [result]
-
-        # Multiple values
-        # We don't raise on unequal lengths, in case there's some
-        # weird post-processing going on
-        for key, value in zip(output_keys, result):
-            context["output"][key] = value
