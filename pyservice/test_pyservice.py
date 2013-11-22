@@ -6,14 +6,14 @@ from contextlib import contextmanager
 from collections import defaultdict
 
 from pyservice.exception_factory import ExceptionFactory
-from pyservice.description import validate_name, parse_metadata, ServiceDescription
+from pyservice.description import validate_name, parse_metadata, default_field, Description, ServiceDescription, OperationDescription
 from pyservice.layer import Layer, Stack
 from pyservice.serialize import JsonSerializer, to_list, to_dict
 from pyservice.util import cached, cached_property
 
 #===========================
 #
-# ServiceDescription
+# Description helpers
 #
 #===========================
 
@@ -61,201 +61,29 @@ def test_parse_metadata_all_blacklisted():
     blacklist = ["key", "other_key"]
     assert {} == parse_metadata(data, blacklist)
 
-def test_description_from_json():
-    data = json.loads(valid_description_string().replace('\n', ''))
-    ServiceDescription.from_json(data)
+#===========================
+#
+# Description
+#
+#===========================
 
-def test_description_from_string():
-    string = valid_description_string()
-    ServiceDescription.from_string(string)
+# TODO
 
-def test_description_from_file():
-    with tempfile.NamedTemporaryFile(mode='w+') as file_obj:
-        file_obj.write(valid_description_string())
-        file_obj.seek(0)
-        ServiceDescription.from_file(file_obj.name)
+#===========================
+#
+# ServiceDescription
+#
+#===========================
 
-def test_description_loads_defaults():
-    string = """{"name": "service"}"""
-    description = ServiceDescription.from_string(string)
-    assert [] == description.operations
-    assert [] == description.exceptions
+# TODO
 
-def test_description_loads_operation_defaults():
-    string = """{
-        "name": "service",
-        "operations": [{"name": "operation1"}]
-    }"""
-    description = ServiceDescription.from_string(string)
-    operation = description.operation("operation1")
-    assert [] == operation["input"]
-    assert [] == operation["output"]
+#===========================
+#
+# OperationDescription
+#
+#===========================
 
-def test_description_operation():
-    string = """{
-        "name": "service",
-        "operations": [{"name": "operation1"}]
-    }"""
-    description = ServiceDescription.from_string(string)
-    description.operation("operation1")
-
-def test_description_unknown_operation():
-    string = """{
-        "name": "service",
-        "operations": [{"name": "operation1"}]
-    }"""
-    description = ServiceDescription.from_string(string)
-    with pytest.raises(KeyError):
-        description.operation("operation2")
-
-def test_description_name():
-    description = ServiceDescription.from_string(valid_description_string())
-    assert "service" == description.name
-
-def test_invalid_description_name_raises():
-    invalid_string = '{}'
-    description = ServiceDescription.from_string(invalid_string)
-
-    with pytest.raises(KeyError):
-        description.name
-
-def test_description_operations():
-    string = """{
-        "name": "service",
-        "operations": [
-            {"name": "operation1"},
-            {"name": "operation2"},
-            {"name": "operation3"}
-        ]
-    }"""
-    description = ServiceDescription.from_string(string)
-    assert ["operation1", "operation2", "operation3"] == description.operations
-
-def test_description_operations_empty():
-    string = """{
-        "name": "service",
-        "operations": []
-    }"""
-    description = ServiceDescription.from_string(string)
-    assert [] == description.operations
-
-    string = """{"name": "service"}"""
-    description = ServiceDescription.from_string(string)
-    assert [] == description.operations
-
-def test_description_exceptions():
-    string = """{
-        "name": "service",
-        "exceptions": [
-            "exception1",
-            "exception2",
-            "exception3"
-        ]
-    }"""
-    description = ServiceDescription.from_string(string)
-    assert ["exception1", "exception2", "exception3"] == description.exceptions
-
-
-def test_description_exceptions_empty():
-    string = """{
-        "name": "service",
-        "exceptions": []
-    }"""
-    description = ServiceDescription.from_string(string)
-    assert [] == description.exceptions
-
-    string = """{"name": "service"}"""
-    description = ServiceDescription.from_string(string)
-    assert [] == description.exceptions
-
-def test_description_metadata_empty():
-    string = "{}"
-    description = ServiceDescription.from_string(string)
-    assert {} == description.metadata
-
-def test_description_metadata_multiple_nested():
-    string = """{
-        "meta1": {
-            "inner_meta1": "value1"
-        },
-        "meta2": [
-            "inner_meta2"
-        ]
-    }"""
-    description = ServiceDescription.from_string(string)
-    assert json.loads(string.replace('\n', '')) == description.metadata
-
-def test_description_metadata_blacklist():
-    description = ServiceDescription.from_string(valid_description_string())
-    assert {} == description.metadata
-
-def test_description_validate():
-    description = ServiceDescription.from_string(valid_description_string())
-    description.validate()
-
-def test_description_validate_minimum():
-    description = ServiceDescription.from_string('{"name": "service"}')
-    description.validate()
-
-def test_description_validate_empty():
-    description = ServiceDescription.from_string("{}")
-    with pytest.raises(KeyError):
-        description.validate()
-
-def test_description_validate_duplicate_operations():
-    string = """{
-        "name": "service",
-        "operations": [
-            {"name": "operation1"},
-            {"name": "operation1"},
-            {"name": "operation3"}
-        ]
-    }"""
-    description = ServiceDescription.from_string(string)
-    with pytest.raises(KeyError):
-        description.validate()
-
-def test_description_validate_bad_operation_input():
-    string = """{
-        "name": "service",
-        "operations": [{
-            "name": "operation1",
-            "input": ["_invalid"]
-        }]
-    }"""
-    description = ServiceDescription.from_string(string)
-    with pytest.raises(ValueError):
-        description.validate()
-
-def test_description_validate_bad_operation_output():
-    string = """{
-        "name": "service",
-        "operations": [{
-            "name": "operation1",
-            "input": ["_invalid"]
-        }]
-    }"""
-    description = ServiceDescription.from_string(string)
-    with pytest.raises(ValueError):
-        description.validate()
-
-def test_description_validate_bad_exception_name():
-    string = """{
-        "name": "service",
-        "exceptions": ["_invalid"]
-    }"""
-    description = ServiceDescription.from_string(string)
-    with pytest.raises(ValueError):
-        description.validate()
-
-def test_description_validate_bad_metadata_name():
-    string = """{
-        "name": "service",
-        "_invalid_metadata_key": "value"
-    }"""
-    description = ServiceDescription.from_string(string)
-    with pytest.raises(ValueError):
-        description.validate()
+# TODO
 
 #===========================
 #
