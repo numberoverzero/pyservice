@@ -1,3 +1,14 @@
+from functools import wraps
+
+def cached(func):
+    cache = func._cache = {}
+    @wraps(func)
+    def wrapper(*args):
+        if args not in cache:
+            cache[args] = func(*args)
+        return cache[args]
+    return wrapper
+
 class cached_property(property):
     '''
     Very basic descriptor -

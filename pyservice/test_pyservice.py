@@ -1,11 +1,12 @@
 import six
 import pytest
 from contextlib import contextmanager
+from collections import defaultdict
 
 from pyservice.exception_factory import ExceptionFactory
 from pyservice.serialize import JsonSerializer, to_list, to_dict
 from pyservice.layer import Layer, Stack
-from pyservice.util import cached_property
+from pyservice.util import cached, cached_property
 
 #===========================
 #
@@ -301,6 +302,56 @@ def test_stack_execution_nesting():
 #
 #===========================
 
+def test_cached_decorator():
+    cls = cached_decorator_class()
+
+    data = "Hello"
+    # Class definition shouldn't increment
+    assert 0 == cls.calls[data]
+
+    # Instantiation shouldn't increment
+    obj = cls()
+    assert 0 == cls.calls[data]
+
+    # First call increments
+    assert data == obj.get(data)
+    assert 1 == cls.calls[data]
+
+    # Second call cached
+    assert data == obj.get(data)
+    assert 1 == cls.calls[data]
+
+def test_cached_decorator_no_collisions():
+    cls = cached_decorator_class()
+
+    obj = cls()
+    data = "Hello"
+    other_data = "World"
+    assert 0 == cls.calls[other_data]
+
+    # First call increments - only data
+    assert data == obj.get(data)
+    assert 1 == cls.calls[data]
+    assert 0 == cls.calls[other_data]
+
+    # Second call cached - only data
+    assert data == obj.get(data)
+    assert 1 == cls.calls[data]
+    assert 0 == cls.calls[other_data]
+
+    # Cache other_data
+    assert other_data == obj.get(other_data)
+
+    # Different items cached
+    assert 2 == len(cls.calls)
+
+
+#===========================
+#
+# cached_property
+#
+#===========================
+
 def test_cached_property_get_invoked_once():
     cls = cached_property_class()
 
@@ -350,18 +401,13 @@ def test_cached_property_is_fragile():
     class other_decorator(property):
         pass
 
-    class Test(object):
+    class Class(object):
         @cached_property
         @other_decorator
         def foo(self):
             return "foo"
 
-        @cached_property
-        @other_decorator
-        def bar(self):
-            return "bar"
-
-    obj = Test()
+    obj = Class()
     with pytest.raises(AttributeError):
         obj.foo
 
@@ -402,4 +448,14 @@ def cached_property_class():
         @foo.deleter
         def foo(self):
             Class.dels += 1
+    return Class
+
+def cached_decorator_class():
+    class Class(object):
+        calls = defaultdict(int)
+
+        @cached
+        def get(self, data):
+            Class.calls[data] += 1
+            return data
     return Class
