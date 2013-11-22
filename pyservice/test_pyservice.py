@@ -4,6 +4,7 @@ from contextlib import contextmanager
 
 from pyservice.exception_factory import ExceptionFactory
 from pyservice.serialize import JsonSerializer
+from pyservice.layer import Layer
 
 #===========================
 #
@@ -101,6 +102,36 @@ def test_good_serialize():
     actual = serializer.serialize(data)
 
     assert expected == actual
+
+#===========================
+#
+# Layers
+#
+#===========================
+
+def test_layer_register():
+    class Registry(object):
+        registered = []
+        def _register_layer(self, layer):
+            Registry.registered.append(layer)
+    registry = Registry()
+    layer = Layer(registry)
+
+    assert layer in registry.registered
+
+def test_layer_calls_next():
+    class Callable(object):
+        called = False
+        def handle_request(self, context):
+            Callable.called = True
+
+    next = Callable()
+    context = {}
+
+    layer = Layer()
+    layer.handle_request(context, next)
+    assert Callable.called
+
 
 #===========================
 #
