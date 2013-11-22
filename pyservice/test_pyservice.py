@@ -346,6 +346,25 @@ def test_cached_property_get_no_fget():
     with pytest.raises(AttributeError):
         cp.__get__(True)
 
+def test_cached_property_is_fragile():
+    class other_decorator(property):
+        pass
+
+    class Test(object):
+        @cached_property
+        @other_decorator
+        def foo(self):
+            return "foo"
+
+        @cached_property
+        @other_decorator
+        def bar(self):
+            return "bar"
+
+    obj = Test()
+    with pytest.raises(AttributeError):
+        obj.foo
+
 #===========================
 #
 # Helpers for testing
