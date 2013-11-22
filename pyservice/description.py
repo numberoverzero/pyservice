@@ -86,3 +86,22 @@ class Description(object):
     def metadata(self):
         blacklist = ["name", "operations", "exceptions"]
         return parse_metadata(self.__obj, blacklist)
+
+    def validate(self):
+        validate_name(self.name)
+
+        op_names = self.operations
+        if len(set(op_names)) != len(op_names):
+            raise KeyError("Duplicate operations found: '{}'".format(op_names))
+        for op_name in op_names:
+            validate_name(op_name)
+            operation = self.operation(op_name)
+            for attr in ["input", "output"]:
+                for field in operation[attr]:
+                    validate_name(field)
+
+        for exception in self.exceptions:
+            validate_name(exception)
+
+        # Accessing properties for side-effects :(
+        self.metadata

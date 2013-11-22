@@ -189,6 +189,74 @@ def test_description_metadata_blacklist():
     description = Description.from_string(valid_description_string())
     assert {} == description.metadata
 
+def test_description_validate():
+    description = Description.from_string(valid_description_string())
+    description.validate()
+
+def test_description_validate_minimum():
+    description = Description.from_string('{"name": "service"}')
+    description.validate()
+
+def test_description_validate_empty():
+    description = Description.from_string("{}")
+    with pytest.raises(KeyError):
+        description.validate()
+
+def test_description_validate_duplicate_operations():
+    string = """{
+        "name": "service",
+        "operations": [
+            {"name": "operation1"},
+            {"name": "operation1"},
+            {"name": "operation3"}
+        ]
+    }"""
+    description = Description.from_string(string)
+    with pytest.raises(KeyError):
+        description.validate()
+
+def test_description_validate_bad_operation_input():
+    string = """{
+        "name": "service",
+        "operations": [{
+            "name": "operation1",
+            "input": ["_invalid"]
+        }]
+    }"""
+    description = Description.from_string(string)
+    with pytest.raises(ValueError):
+        description.validate()
+
+def test_description_validate_bad_operation_output():
+    string = """{
+        "name": "service",
+        "operations": [{
+            "name": "operation1",
+            "input": ["_invalid"]
+        }]
+    }"""
+    description = Description.from_string(string)
+    with pytest.raises(ValueError):
+        description.validate()
+
+def test_description_validate_bad_exception_name():
+    string = """{
+        "name": "service",
+        "exceptions": ["_invalid"]
+    }"""
+    description = Description.from_string(string)
+    with pytest.raises(ValueError):
+        description.validate()
+
+def test_description_validate_bad_metadata_name():
+    string = """{
+        "name": "service",
+        "_invalid_metadata_key": "value"
+    }"""
+    description = Description.from_string(string)
+    with pytest.raises(ValueError):
+        description.validate()
+
 #===========================
 #
 # Exception Factory
