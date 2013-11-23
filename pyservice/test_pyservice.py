@@ -802,11 +802,59 @@ def test_client_config_fallbacks():
 
 def test_client_default_uri_and_timeout():
     data = {"name": "client"}
-    description = ServiceDescription(data)
-    client = Client(description)
+    client = dumb_client(data)
 
     assert "http://localhost:8080/client/{operation}" == client._uri
     assert 5 == client._timeout
+
+def test_client_call_unknown_operation():
+    data = {"name": "client"}
+    client = dumb_client(data)
+
+    with pytest.raises(KeyError):
+        client._call("UnknownOperation", 1, 2, 3)
+
+def test_client_call_missing_args():
+    data = {"name": "client", "operations": [{"name": "operation", "input": ["arg1", "arg2"]}]}
+    client = dumb_client(data)
+
+    with pytest.raises(ValueError):
+        client._call("operation", "arg1")
+
+def test_client_call_extra_args():
+    data = {"name": "client", "operations": [{"name": "operation", "input": ["arg1", "arg2"]}]}
+    client = dumb_client(data)
+
+    with pytest.raises(ValueError):
+        client._call("operation", "arg1", "arg2", "extra")
+
+def test_client_call_raises_on_serializer_failure():
+    data = {"name": "client", "operations": [{"name": "operation", "input": ["arg1", "arg2"]}]}
+    client = dumb_client(data)
+
+    # json.encoder throws TypeError: <type 'NameError'> is not JSON serializable
+    with pytest.raises(TypeError):
+        client._call("operation", "arg1", NameError)
+
+def test_client_operation_building():
+    data = {"name": "client", "operations": [{"name": "my_operation", "input": ["arg1", "arg2"]}]}
+    client = dumb_client(data)
+
+    assert callable(client.my_operation)
+    with pytest.raises(AttributeError):
+        assert not callable(client.unknown_operation)
+
+def test_client_wire_handler_exception_wrapping():
+    data = {"name": "client", "operations": [{"name": "my_operation", "input": ["arg1", "arg2"]}]}
+    description = ServiceDescription(data)
+    client = Client(description)
+
+    def handler(*a, **kw):
+        raise Exception("wire handler raised")
+    client._wire_handler = handler
+
+    with pytest.raises(client.exceptions.ServiceException):
+        client._call("my_operation", 1, 2)
 
 def test_client_handle_exception_raises():
     '''
@@ -861,11 +909,18 @@ def test_client_handle_exception_no_raise():
 #
 #===========================
 
-def test_requests_handler_google():
+def test_requests_handler_success():
     uri = "http://httpbin.org/post"
     data = ''
     timeout = 1
     assert requests_wire_handler(uri, data=data, timeout=timeout)
+
+def test_requests_handler_raises():
+    uri = "http://google.com"
+    data = ''
+    timeout = 1
+    with pytest.raises(requests.exceptions.HTTPError):
+        requests_wire_handler(uri, data=data, timeout=timeout)
 
 #===========================
 #
@@ -940,3 +995,33 @@ def valid_description_string():
         "exceptions": ["exception1", "exception2"]
     }
     """
+
+def dumb_wire_handler(output=None, exception=None):
+    '''Construct a dumb wire handler that returns a fixed json'''
+    if exception:
+        result = json.dumps({
+            "__exception": {
+                "cls": exception.__class__,
+                "args": exception.args
+            }
+        })
+    else:
+        result = json.dumps(output)
+
+    def handler(*args, **kwargs):
+        return result
+    return handler
+
+def dumb_client(data):
+    '''
+    Dumb client with an empty wire handler
+
+    Useful for testing exceptions that should occur
+    before the wire handler is invoked
+    '''
+    description = ServiceDescription(data)
+    client = Client(description)
+    def noop(*a, **kw):
+        raise BaseException("Handler called")
+    client._wire_handler = noop
+    return client
