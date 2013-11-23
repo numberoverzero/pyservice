@@ -75,3 +75,20 @@ class ExceptionFactory(object):
             if not ex_cls:
                 raise NameError("global name '{}' is not defined".format(name))
         return ex_cls
+
+
+class ExceptionContainer(object):
+    '''
+    Usage:
+        exceptions = ExceptionContainer()
+        try:
+            ...
+        except exceptions.KeyError as e:
+            print e.args
+        except exceptions.SomeException as e:
+            print e.args
+    '''
+    def __init__(self):
+        self._factory = ExceptionFactory()
+    def __getattr__(self, name):
+        return self._factory.exception_cls(name)

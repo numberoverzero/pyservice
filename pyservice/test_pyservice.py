@@ -5,8 +5,15 @@ import tempfile
 from contextlib import contextmanager
 from collections import defaultdict
 
-from pyservice.exception_factory import ExceptionFactory
-from pyservice.description import validate_name, parse_metadata, default_field, Description, ServiceDescription, OperationDescription
+from pyservice.exception_factory import ExceptionFactory, ExceptionContainer
+from pyservice.description import (
+    validate_name,
+    parse_metadata,
+    default_field,
+    Description,
+    ServiceDescription,
+    OperationDescription
+)
 from pyservice.layer import Layer, Stack
 from pyservice.serialize import JsonSerializer, to_list, to_dict
 from pyservice.util import cached, cached_property
@@ -350,6 +357,31 @@ def test_missing_builtin():
     with removed_global(name):
         with pytest.raises(RealNameError):
             ExceptionFactory().exception(name, *args)
+
+#===========================
+#
+# Exception Container
+#
+#===========================
+
+def test_exception_container_builtin():
+    exceptions = ExceptionContainer()
+    assert KeyError is exceptions.KeyError
+    assert exceptions.KeyError is exceptions.KeyError
+    with pytest.raises(ValueError):
+        raise exceptions.ValueError("Equivalent type")
+
+def test_exception_container_custom():
+    exceptions = ExceptionContainer()
+    class MyException(Exception):
+        pass
+    assert MyException is not exceptions.MyException
+
+    with pytest.raises(exceptions.PreviouslyUndefinedException):
+        raise exceptions.PreviouslyUndefinedException()
+
+    with pytest.raises(Exception):
+        raise exceptions.BaseClassIsException()
 
 #===========================
 #
