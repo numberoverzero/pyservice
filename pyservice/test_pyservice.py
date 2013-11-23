@@ -19,6 +19,7 @@ from pyservice.layer import Layer, Stack
 from pyservice.serialize import JsonSerializer, to_list, to_dict
 from pyservice.util import cached, cached_property
 from pyservice.client import Client, requests_wire_handler
+from pyservice.service import Service
 
 #===========================
 #
@@ -1015,6 +1016,47 @@ def test_requests_handler_raises():
     timeout = 1
     with pytest.raises(requests.exceptions.HTTPError):
         requests_wire_handler(uri, data=data, timeout=timeout)
+
+#===========================
+#
+# Service
+#
+#===========================
+
+def test_service_empty_description():
+    with pytest.raises(AttributeError):
+        Client(None)
+
+def test_service_minimum_valid_description():
+    data = {"name": "service"}
+    description = ServiceDescription(data)
+    Client(description)
+
+def test_service_config_fallbacks():
+    # Fall all the way through to default
+    data = {"name": "service"}
+    description = ServiceDescription(data)
+    service = Service(description)
+    assert "default" == service._attr("metakey", "default")
+
+    # Fall through to description
+    data = {"name": "service", "metakey": "description"}
+    description = ServiceDescription(data)
+    service = Service(description)
+    assert "description" == service._attr("metakey", "default")
+
+    # Fall through to init config
+    data = {"name": "service", "metakey": "description"}
+    description = ServiceDescription(data)
+    service = Service(description, metakey="init_config")
+    assert "init_config" == service._attr("metakey", "default")
+
+    # Fall through to run config
+    data = {"name": "service", "metakey": "description"}
+    description = ServiceDescription(data)
+    service = Service(description, metakey="init_config")
+    service._run_config["metakey"] = "run_config"
+    assert "run_config" == service._attr("metakey", "default")
 
 #===========================
 #
