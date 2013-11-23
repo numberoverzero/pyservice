@@ -222,7 +222,62 @@ def test_operation_description_invalid_output():
 #
 #===========================
 
-# TODO
+def test_service_description_no_name():
+    data = {}
+    with pytest.raises(KeyError):
+        ServiceDescription(data)
+
+def test_service_description_no_operations_or_exceptions():
+    data = {"name": "service"}
+    service = ServiceDescription(data)
+    assert not service.exceptions
+    assert not service.operations
+
+def test_service_description_valid_operation_formats():
+    data = {
+        "name": "service",
+        "operations": [
+            "operation1",
+            {
+                "name": "operation2"
+            },
+            {
+                "name": "operation3",
+                "input": ["input3_1"]
+            },
+            {
+                "name": "operation4",
+                "input": [
+                    "input4_1",
+                    {"name": "input4_2"}
+                ]
+            }
+        ]
+    }
+    service = ServiceDescription(data)
+
+    expected_operations = ["operation"+str(i) for i in [1,2,3,4]]
+    assert set(expected_operations) == set(service.operations)
+
+    assert not service.operations["operation1"].input
+    assert not service.operations["operation2"].input
+    assert ["input3_1"] == [field.name for field in service.operations["operation3"].input]
+    assert ["input4_1", "input4_2"] == [field.name for field in service.operations["operation4"].input]
+
+def test_service_description_valid_exceptions():
+    data = {
+        "name": "service",
+        "exceptions": [
+            "exception1",
+            {
+                "name": "exception2"
+            }
+        ]
+    }
+    service = ServiceDescription(data)
+
+    expected_exceptions = ["exception1", "exception2"]
+    assert set(expected_exceptions) == set(service.exceptions)
 
 #===========================
 #

@@ -74,8 +74,6 @@ class Description(object):
         return reserved_fields
 
 
-
-
 class OperationDescription(Description):
     reserved_fields = ["input", "output"]
 
@@ -84,14 +82,14 @@ class OperationDescription(Description):
 
         # Input/Output are basic Descriptions because they
         # have no attributes besides their name
+        # List, not dict, since order matters
+
         ins = default_field(self._obj, "input", list)
         in_objs = [Description(in_) for in_ in ins]
-        # List, not dict, since order matters
         self._obj["input"] = in_objs
 
         outs = default_field(self._obj, "output", list)
         out_objs = [Description(out_) for out_ in outs]
-        # List, not dict, since order matters
         self._obj["output"] = out_objs
 
     @cached_property
@@ -117,8 +115,8 @@ class ServiceDescription(Description):
     def __init__(self, json_obj):
         super(ServiceDescription, self).__init__(json_obj)
 
-        # Exceptions are basic Descriptions because they have no attributes
-        # right now besides their name
+        # Exceptions are basic Descriptions because
+        # right now, they have no attributes besides their name
         exs = default_field(self._obj, "exceptions", list)
         ex_objs = [Description(ex) for ex in exs]
         self._obj["exceptions"] = dict((ex.name, ex) for ex in ex_objs)
@@ -126,8 +124,6 @@ class ServiceDescription(Description):
         ops = default_field(self._obj, "operations", list)
         op_objs = [OperationDescription(op) for op in ops]
         self._obj["operations"] = dict((op.name, op) for op in op_objs)
-
-        self.metadata
 
         # Convert to dict so the following are both possible:
         # "foo_operation" in desc.operations
