@@ -42,7 +42,8 @@ class Client(object):
         uri = self._uri.format(operation=operation)
 
         # list -> dict
-        signature = self._description.operations[operation].input
+        desc_input = self._description.operations[operation].input
+        signature = [field.name for field in desc_input]
         context = serialize.to_dict(signature, args)
 
         # dict -> wire
@@ -54,7 +55,8 @@ class Client(object):
         except Exception:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             exc_type = self.exceptions.ServiceException
-            six.reraise(exc_type, exc_value, exc_traceback=exc_traceback)
+            exc_value = exc_type(exc_value)
+            six.reraise(exc_type, exc_value, tb=exc_traceback)
 
         # wire -> dict
         context = self._serializer.deserialize(response)
@@ -62,7 +64,8 @@ class Client(object):
         self._handle_exception(context)
 
         # dict -> list
-        signature = self._description.operations[operation].output
+        desc_output = self._description.operations[operation].output
+        signature = [field.name for field in desc_output]
         result = serialize.to_list(signature, context)
 
         # Unpack empty lists and single values
