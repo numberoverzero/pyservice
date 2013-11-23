@@ -104,14 +104,6 @@ class OperationDescription(Description):
 class ServiceDescription(Description):
     reserved_fields = ["exceptions", "operations"]
 
-    '''
-    Read-only.  Properties are cached.
-
-    Wrapper around a json-like object
-      which provides helpers for inspecting
-      expected attributes, such as input,
-      output, and operations.
-    '''
     def __init__(self, json_obj):
         super(ServiceDescription, self).__init__(json_obj)
 
