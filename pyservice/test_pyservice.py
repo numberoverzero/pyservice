@@ -279,6 +279,16 @@ def test_service_description_valid_exceptions():
     expected_exceptions = ["exception1", "exception2"]
     assert set(expected_exceptions) == set(service.exceptions)
 
+def test_full_description_metadata():
+    string = valid_description_string()
+    service = ServiceDescription.from_string(string)
+
+    assert not service.metadata
+    for name, operation in six.iteritems(service.operations):
+        assert not operation.metadata
+    for name, exception in six.iteritems(service.exceptions):
+        assert not exception.metadata
+
 #===========================
 #
 # Exception Factory

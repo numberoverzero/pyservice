@@ -1,7 +1,7 @@
 import re
 import six
 import json
-from pyservice.util import cached, cached_property
+from pyservice.util import cached_property
 
 # Most names can only be \w*,
 # with the special restriction that the
@@ -124,29 +124,6 @@ class ServiceDescription(Description):
         ops = default_field(self._obj, "operations", list)
         op_objs = [OperationDescription(op) for op in ops]
         self._obj["operations"] = dict((op.name, op) for op in op_objs)
-
-        # Convert to dict so the following are both possible:
-        # "foo_operation" in desc.operations
-        # if "field" in desc.operations["foo_operation"].input
-
-        # TODO: An operation that isn't an object (just a string) should be valid-
-        #           it has no onput or output
-        #       Add test for above
-        #       Same is true of exceptions - if they're just a string, that is the name attribute
-        #       Add test for operation object without name field
-        # Basically, the following are equivalent:
-        #
-        # {
-        #   "operations": [
-        #       {"name": "operation_name"}
-        #   ]
-        # }
-
-        # {
-        #   "operations": [
-        #       "operation_name"
-        #   ]
-        # }
 
     @cached_property
     def operations(self):
