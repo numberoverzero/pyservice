@@ -17,6 +17,7 @@ from pyservice.description import (
 from pyservice.layer import Layer, Stack
 from pyservice.serialize import JsonSerializer, to_list, to_dict
 from pyservice.util import cached, cached_property
+from pyservice.client import Client, requests_wire_handler
 
 #===========================
 #
@@ -739,6 +740,22 @@ def test_cached_property_is_fragile():
     obj = Class()
     with pytest.raises(AttributeError):
         obj.foo
+
+#===========================
+#
+# Client
+#
+#===========================
+
+# TODO
+
+#===========================
+#
+# requests_wire_handler
+#
+#===========================
+
+# TODO
 
 #===========================
 #
