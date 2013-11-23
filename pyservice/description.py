@@ -37,6 +37,22 @@ class Description(object):
         self._obj = json_obj
         validate_name(self.name)
 
+    @classmethod
+    def from_json(cls, data):
+        # Copy input
+        return cls(dict(data))
+
+    @classmethod
+    def from_string(cls, string):
+        data = json.loads(string.replace('\n',''))
+        return cls.from_json(data)
+
+    @classmethod
+    def from_file(cls, filename):
+        with open(filename) as file_obj:
+            string = file_obj.read()
+            return cls.from_string(string)
+
     @cached_property
     def name(self):
         return self._obj["name"]
@@ -58,12 +74,12 @@ class ServiceDescription(Description):
         # right now besides their name
         exs = default_field(self._obj, "exceptions", list)
         ex_objs = [Description(ex) for ex in exs]
-        self.__obj["exceptions"] = dict((ex.name, ex) for ex in ex_objs)
+        self._obj["exceptions"] = dict((ex.name, ex) for ex in ex_objs)
 
         ops = default_field(self._obj, "operations", list)
         op_objs = [OperationDescription(op) for op in ops]
         self._obj["operations"] = dict((op.name, op) for op in op_objs)
-        
+
         self.metadata
 
         # Convert to dict so the following are both possible:
@@ -88,22 +104,6 @@ class ServiceDescription(Description):
         #       "operation_name"
         #   ]
         # }
-
-    @classmethod
-    def from_json(self, data):
-        # Copy input
-        return Description(dict(data))
-
-    @classmethod
-    def from_string(self, string):
-        data = json.loads(string.replace('\n',''))
-        return Description.from_json(data)
-
-    @classmethod
-    def from_file(self, filename):
-        with open(filename) as file_obj:
-            string = file_obj.read()
-            return Description.from_string(string)
 
     @cached_property
     def operations(self):

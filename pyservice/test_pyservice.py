@@ -96,7 +96,37 @@ def test_default_field_does_not_have_field():
 #
 #===========================
 
-# TODO
+def test_description_no_name_attr():
+    obj = {"invalid": "obj"}
+    with pytest.raises(KeyError):
+        Description(obj)
+
+def test_description_has_name_attr():
+    obj = {"name": "foo"}
+    desc = Description(obj)
+    assert desc._obj is obj
+    assert desc.name == obj["name"]
+
+def test_description_init_string():
+    name = "foo"
+    desc = Description(name)
+    assert name == desc.name
+
+def test_description_from_json():
+    data = json.loads(valid_description_string().replace('\n', ''))
+    desc = Description.from_json(data)
+    assert "service" == desc.name
+    assert data is not desc._obj
+
+def test_description_from_string():
+    string = valid_description_string()
+    Description.from_string(string)
+
+def test_description_from_file():
+    with tempfile.NamedTemporaryFile(mode='w+') as file_obj:
+        file_obj.write(valid_description_string())
+        file_obj.seek(0)
+        Description.from_file(file_obj.name)
 
 #===========================
 #
