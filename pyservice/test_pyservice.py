@@ -881,6 +881,54 @@ def test_client_call_wire_wrong_results():
     with pytest.raises(client.exceptions.ServiceException):
         client._call("operation")
 
+def test_client_call_returns_none():
+    data = {"name": "client", "operations": ["operation"]}
+    description = ServiceDescription(data)
+    client = Client(description)
+
+    # Doesn't matter if we return extra fields
+    output = {"unused":"field"}
+    client._wire_handler = dumb_wire_handler(output=output)
+
+    result = client._call("operation")
+    assert None is result
+
+def test_client_call_single_return_value():
+    data = {"name": "client", "operations": [{"name": "operation", "output": ["field"]}]}
+    description = ServiceDescription(data)
+    client = Client(description)
+
+    # Doesn't matter if we return extra fields
+    output = {"field":"value", "unused": "unused"}
+    client._wire_handler = dumb_wire_handler(output=output)
+
+    result = client._call("operation")
+    assert "value" == result
+
+def test_client_call_none_is_valid_single_return():
+    data = {"name": "client", "operations": [{"name": "operation", "output": ["field"]}]}
+    description = ServiceDescription(data)
+    client = Client(description)
+
+    # Doesn't matter if we return extra fields
+    output = {"field": None, "unused": "unused"}
+    client._wire_handler = dumb_wire_handler(output=output)
+
+    result = client._call("operation")
+    assert None is result
+
+def test_client_call_multiple_return_values():
+    data = {"name": "client", "operations": [{"name": "operation", "output": ["field1", "field2"]}]}
+    description = ServiceDescription(data)
+    client = Client(description)
+
+    output = {"field1": "value1", "field2": "value2"}
+    client._wire_handler = dumb_wire_handler(output=output)
+
+    result1, result2 = client._call("operation")
+    assert "value1" == result1
+    assert "value2" == result2
+
 def test_client_operation_building():
     data = {"name": "client", "operations": [{"name": "my_operation", "input": ["arg1", "arg2"]}]}
     client = dumb_client(data)
