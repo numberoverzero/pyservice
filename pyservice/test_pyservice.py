@@ -61,6 +61,35 @@ def test_parse_metadata_all_blacklisted():
     blacklist = ["key", "other_key"]
     assert {} == parse_metadata(data, blacklist)
 
+def test_default_field_has_field():
+    class Class(object):
+        calls = 0
+        def __init__(self):
+            Class.calls += 1
+
+    value = {0: 1}
+    obj = { "name": value }
+    field = "name"
+    cls = Class
+    value_out = default_field(obj, field, cls)
+    assert value is value_out
+    assert value is obj["name"]
+    assert 0 == Class.calls
+
+def test_default_field_does_not_have_field():
+    class Class(object):
+        calls = 0
+        def __init__(self):
+            Class.calls += 1
+
+    obj = {}
+    field = "name"
+    cls = Class
+
+    value_out = default_field(obj, field, cls)
+    assert value_out is obj["name"]
+    assert 1 == Class.calls
+
 #===========================
 #
 # Description
