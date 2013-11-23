@@ -64,9 +64,12 @@ class Client(object):
         self._handle_exception(context)
 
         # dict -> list
-        desc_output = self._description.operations[operation].output
-        signature = [field.name for field in desc_output]
-        result = serialize.to_list(signature, context)
+        try:
+            desc_output = self._description.operations[operation].output
+            signature = [field.name for field in desc_output]
+            result = serialize.to_list(signature, context)
+        except Exception:
+            raise self.exceptions.ServiceException("Server returned invalid/incomplete response")
 
         # Unpack empty lists and single values
         if not signature:

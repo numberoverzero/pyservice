@@ -836,6 +836,51 @@ def test_client_call_raises_on_serializer_failure():
     with pytest.raises(TypeError):
         client._call("operation", "arg1", NameError)
 
+def test_client_call_raises_on_deserializer_failure():
+    data = {"name": "client", "operations": ["operation1"]}
+    description = ServiceDescription(data)
+    client = Client(description)
+
+    def malformed_handler(*a, **kw):
+        return '{"name": [,}'
+    client._wire_handler = malformed_handler
+
+    with pytest.raises(ValueError):
+        client._call("operation1")
+
+def test_client_call_raises_exception_from_wire():
+    data = {"name": "client", "operations": ["operation1"]}
+    description = ServiceDescription(data)
+    client = Client(description)
+    class RealException(Exception):
+        pass
+    exception_args = ["message", 1, 2, 3]
+    client._wire_handler = dumb_wire_handler(exception=RealException(*exception_args))
+    with pytest.raises(client.exceptions.RealException):
+        client._call("operation1")
+
+def test_client_call_wire_missing_result():
+    data = {"name": "client", "operations": [{"name": "operation", "output": ["result1", "result2"]}]}
+    description = ServiceDescription(data)
+    client = Client(description)
+
+    output = {"result1": "wire_result"}
+    client._wire_handler = dumb_wire_handler(output=output)
+
+    with pytest.raises(client.exceptions.ServiceException):
+        client._call("operation")
+
+def test_client_call_wire_wrong_results():
+    data = {"name": "client", "operations": [{"name": "operation", "output": ["result1", "result2"]}]}
+    description = ServiceDescription(data)
+    client = Client(description)
+
+    output = {"result1": "wire_result", "wrong": "field"}
+    client._wire_handler = dumb_wire_handler(output=output)
+
+    with pytest.raises(client.exceptions.ServiceException):
+        client._call("operation")
+
 def test_client_operation_building():
     data = {"name": "client", "operations": [{"name": "my_operation", "input": ["arg1", "arg2"]}]}
     client = dumb_client(data)
@@ -855,6 +900,7 @@ def test_client_wire_handler_exception_wrapping():
 
     with pytest.raises(client.exceptions.ServiceException):
         client._call("my_operation", 1, 2)
+
 
 def test_client_handle_exception_raises():
     '''
@@ -1001,7 +1047,7 @@ def dumb_wire_handler(output=None, exception=None):
     if exception:
         result = json.dumps({
             "__exception": {
-                "cls": exception.__class__,
+                "cls": exception.__class__.__name__,
                 "args": exception.args
             }
         })
