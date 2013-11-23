@@ -98,6 +98,6 @@ def to_dict(signature, data):
     data must be iterable.
     '''
     if len(data) != len(signature):
-        raise ValueError("Output '{}' did not match signature '{}'".format(data, signature))
+        raise ValueError("Value '{}' did not match signature '{}'".format(data, signature))
 
     return dict(six.moves.zip(signature, data))
