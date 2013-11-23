@@ -128,13 +128,93 @@ def test_description_from_file():
         file_obj.seek(0)
         Description.from_file(file_obj.name)
 
+def test_description_metadata_empty():
+    return
+    data = {"name": "name"}
+    desc = Description(data)
+    assert not desc.metadata
+
+def test_description_metadata_reserved_fields_walk_classes():
+    class MyDescription(Description):
+        reserved_fields = ["foo"]
+
+    data = {"name": "name", "foo": "foo"}
+    desc = MyDescription(data)
+    assert not desc.metadata
+
+def test_description_metadata_extra_fields():
+    data = {"name": "name", "key": "value"}
+    desc = Description(data)
+    assert {"key": "value"} == desc.metadata
+
 #===========================
 #
 # OperationDescription
 #
 #===========================
 
-# TODO
+def test_operation_description_no_name():
+    data = {}
+    with pytest.raises(KeyError):
+        OperationDescription(data)
+
+def test_operation_description_no_input_or_output():
+    data = {"name": "operation"}
+    operation = OperationDescription(data)
+    assert not operation.input
+    assert not operation.output
+
+def test_operation_description_valid_input_formats():
+    data = {
+        "name": "operation",
+        "input": [
+            {
+                "name": "input1"
+            },
+            "input2"
+        ]
+    }
+    operation = OperationDescription(data)
+    assert ["input1", "input2"] == [field.name for field in operation.input]
+    assert all(isinstance(field, Description) for field in operation.input)
+
+def test_operation_description_invalid_input():
+    data = {
+        "name": "operation",
+        "input": [
+            {
+                "not_name_field": "bad"
+            }
+        ]
+    }
+    with pytest.raises(KeyError):
+        OperationDescription(data)
+
+def test_operation_description_valid_output_formats():
+    data = {
+        "name": "operation",
+        "output": [
+            {
+                "name": "output1"
+            },
+            "output2"
+        ]
+    }
+    operation = OperationDescription(data)
+    assert ["output1", "output2"] == [field.name for field in operation.output]
+    assert all(isinstance(field, Description) for field in operation.output)
+
+def test_operation_description_invalid_output():
+    data = {
+        "name": "operation",
+        "output": [
+            {
+                "not_name_field": "bad"
+            }
+        ]
+    }
+    with pytest.raises(KeyError):
+        OperationDescription(data)
 
 #===========================
 #

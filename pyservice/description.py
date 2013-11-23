@@ -29,6 +29,8 @@ def default_field(obj, field, cls):
 
 
 class Description(object):
+    reserved_fields = ["name"]
+
     def __init__(self, json_obj):
         if isinstance(json_obj, six.string_types):
             json_obj = {
@@ -57,8 +59,26 @@ class Description(object):
     def name(self):
         return self._obj["name"]
 
+    @cached_property
+    def metadata(self):
+        blacklist = self._reserved_fields()
+        return parse_metadata(self._obj, blacklist)
+
+    def _reserved_fields(self):
+        reserved_fields = []
+        # Walk in reverse to preserve order
+        mro = reversed(self.__class__.__mro__)
+        for cls in mro:
+            cls_rf = getattr(cls, 'reserved_fields', [])
+            reserved_fields.extend(cls_rf)
+        return reserved_fields
+
+
+
 
 class OperationDescription(Description):
+    reserved_fields = ["input", "output"]
+
     def __init__(self, json_obj):
         super(OperationDescription, self).__init__(json_obj)
 
@@ -84,6 +104,8 @@ class OperationDescription(Description):
 
 
 class ServiceDescription(Description):
+    reserved_fields = ["exceptions", "operations"]
+
     '''
     Read-only.  Properties are cached.
 
@@ -137,8 +159,3 @@ class ServiceDescription(Description):
     @cached_property
     def exceptions(self):
         return self._obj["exceptions"]
-
-    @cached_property
-    def metadata(self):
-        blacklist = ["name", "operations", "exceptions"]
-        return parse_metadata(self._obj, blacklist)
