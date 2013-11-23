@@ -130,7 +130,7 @@ def test_description_from_file():
 
 #===========================
 #
-# ServiceDescription
+# OperationDescription
 #
 #===========================
 
@@ -138,7 +138,7 @@ def test_description_from_file():
 
 #===========================
 #
-# OperationDescription
+# ServiceDescription
 #
 #===========================
 

@@ -58,6 +58,31 @@ class Description(object):
         return self._obj["name"]
 
 
+class OperationDescription(Description):
+    def __init__(self, json_obj):
+        super(OperationDescription, self).__init__(json_obj)
+
+        # Input/Output are basic Descriptions because they
+        # have no attributes besides their name
+        ins = default_field(self._obj, "input", list)
+        in_objs = [Description(in_) for in_ in ins]
+        # List, not dict, since order matters
+        self._obj["input"] = in_objs
+
+        outs = default_field(self._obj, "output", list)
+        out_objs = [Description(out_) for out_ in outs]
+        # List, not dict, since order matters
+        self._obj["output"] = out_objs
+
+    @cached_property
+    def input(self):
+        return self._obj["input"]
+
+    @cached_property
+    def output(self):
+        return self._obj["output"]
+
+
 class ServiceDescription(Description):
     '''
     Read-only.  Properties are cached.
@@ -117,28 +142,3 @@ class ServiceDescription(Description):
     def metadata(self):
         blacklist = ["name", "operations", "exceptions"]
         return parse_metadata(self._obj, blacklist)
-
-
-class OperationDescription(Description):
-    def __init__(self, json_obj):
-        super(OperationDescription, self).__init__(json_obj)
-
-        # Input/Output are basic Descriptions because they
-        # have no attributes besides their name
-        ins = default_field(self._obj, "input", list)
-        in_objs = [Description(in_) for in_ in ins]
-        # List, not dict, since order matters
-        self._obj["input"] = in_objs
-
-        outs = default_field(self._obj, "output", list)
-        out_objs = [Description(out_) for out_ in outs]
-        # List, not dict, since order matters
-        self._obj["output"] = out_objs
-
-    @cached_property
-    def input(self):
-        return self._obj["input"]
-
-    @cached_property
-    def output(self):
-        return self._obj["output"]
