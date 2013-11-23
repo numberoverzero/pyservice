@@ -1,6 +1,7 @@
 import six
 import json
 import pytest
+import requests
 import tempfile
 from contextlib import contextmanager
 from collections import defaultdict
@@ -747,7 +748,112 @@ def test_cached_property_is_fragile():
 #
 #===========================
 
-# TODO
+def test_client_empty_description():
+    with pytest.raises(AttributeError):
+        Client(None)
+
+def test_client_minimum_valid_description():
+    data = {"name": "client"}
+    description = ServiceDescription(data)
+    Client(description)
+
+def test_client_exceptions():
+    data = {"name": "client", "exceptions": ["Exception1", "Exception2"]}
+    description = ServiceDescription(data)
+    client = Client(description)
+
+    def raise_ex1():
+        raise client.exceptions.Exception1()
+
+    with pytest.raises(client.exceptions.Exception1):
+        raise_ex1()
+
+    # Can raise un-listed exceptions
+    with pytest.raises(Exception):
+        raise client.exceptions.DynamicExceptionClass("arg1", "arg2")
+
+def test_client_operations_created():
+    ops = ["op_"+str(i) for i in range(100)]
+    data = {"name": "client", "operations": ops}
+    description = ServiceDescription(data)
+    client = Client(description)
+
+    validate = lambda op: callable(getattr(client, op))
+    assert all(map(validate, ops))
+
+def test_client_config_fallbacks():
+    # Fall all the way through to default
+    data = {"name": "client"}
+    description = ServiceDescription(data)
+    client = Client(description)
+    assert "default" == client._attr("metakey", "default")
+
+    # Fall through to description
+    data = {"name": "client", "metakey": "description"}
+    description = ServiceDescription(data)
+    client = Client(description)
+    assert "description" == client._attr("metakey", "default")
+
+    # Fall through to config
+    data = {"name": "client", "metakey": "description"}
+    description = ServiceDescription(data)
+    client = Client(description, metakey="config")
+    assert "config" == client._attr("metakey", "default")
+
+def test_client_default_uri_and_timeout():
+    data = {"name": "client"}
+    description = ServiceDescription(data)
+    client = Client(description)
+
+    assert "http://localhost:8080/client/{operation}" == client._uri
+    assert 5 == client._timeout
+
+def test_client_handle_exception_raises():
+    '''
+    def _handle_exception(self, context):
+        if "__exception" in context and len(context) == 1:
+            exception = context["__exception"]
+            ex_cls = getattr(self.exceptions, exception["cls"])
+            raise ex_cls(*exception["args"])
+    '''
+    data = {"name": "client"}
+    description = ServiceDescription(data)
+    client = Client(description)
+
+    context = {
+        "__exception" : {
+            "cls": "MyException",
+            "args": [1, 2, "Hello"]
+        }
+    }
+
+    with pytest.raises(client.exceptions.MyException):
+        client._handle_exception(context)
+
+def test_client_handle_exception_no_raise():
+    data = {"name": "client"}
+    description = ServiceDescription(data)
+    client = Client(description)
+
+
+    # Shouldn't raise, because __exception object isn't sole context object
+    context = {
+        "__exception" : {
+            "cls": "MyException",
+            "args": [1, 2, "Hello"]
+        },
+        "other_field": "value"
+    }
+    client._handle_exception(context)
+
+    # Shouldn't raise, key isn't __exception
+    context = {
+        "not_exception" : {
+            "cls": "MyException",
+            "args": [1, 2, "Hello"]
+        }
+    }
+    client._handle_exception(context)
 
 #===========================
 #
@@ -755,7 +861,11 @@ def test_cached_property_is_fragile():
 #
 #===========================
 
-# TODO
+def test_requests_handler_google():
+    uri = "http://httpbin.org/post"
+    data = ''
+    timeout = 1
+    assert requests_wire_handler(uri, data=data, timeout=timeout)
 
 #===========================
 #

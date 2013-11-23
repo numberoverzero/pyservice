@@ -4,6 +4,12 @@ import requests
 from pyservice import serialize
 from pyservice.exception_factory import ExceptionContainer
 
+def requests_wire_handler(uri, data='', timeout=None):
+    '''Adapter for requests library'''
+    response = requests.post(uri, data=data, timeout=timeout)
+    response.raise_for_status()
+    return response.text
+
 
 class Client(object):
     def __init__(self, description, **config):
@@ -72,10 +78,3 @@ class Client(object):
             exception = context["__exception"]
             ex_cls = getattr(self.exceptions, exception["cls"])
             raise ex_cls(*exception["args"])
-
-
-def requests_wire_handler(uri, data='', timeout=None):
-    '''Adapter for requests library'''
-    response = requests.post(uri, data=data, timeout=timeout)
-    response.raise_for_status()
-    return response.text
