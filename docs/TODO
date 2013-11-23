@@ -2,10 +2,8 @@ TODO
 ========================
 
 Project:
-    1) Refactor list <--> dict conversion
-        (currently lives in both Client and FunctionExecutor)
-    2) Refactor Service/Operation parsing (move to their classes?)
-    3) Move to JSON-RPC 2.0
+    1) Re-add layer architecture to both client + server
+    2) Add Serializer for JSON-RPC 2.0
 
 Documentation:
     docstrings for all top-level classes
@@ -13,32 +11,3 @@ Documentation:
 
 Description file:
     Formal specification of format
-    Support input/ouput shorthand:
-        {
-            "name": "ServiceName",
-            "operations": [
-                {
-                    "name": "OperationName",
-                    "input": "username",
-                    "output": "userid"
-                }
-            ]
-        }
-    Support input/output metadata:
-        {
-            "name": "ServiceName",
-            "operations": [
-                {
-                    "name": "OperationName",
-                    "input": [
-                        {
-                            "name": "username",
-                            "type": "String",
-                            "validation": "^[a-zA-z]{3,12}$"
-                        },
-                        "validation_token"
-                    ],
-                    "output": "userid"
-                }
-            ]
-        }
