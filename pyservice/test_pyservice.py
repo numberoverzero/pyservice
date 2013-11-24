@@ -1134,6 +1134,39 @@ def test_service_handle_non_whitelisted_exception_while_debugging():
     assert "MyException" == data["cls"]
     assert (1, 2, 3) == data["args"]
 
+def test_service_operation_decorator_unknown_operation():
+    data = {"name": "service"}
+    description = ServiceDescription(data)
+    service = Service(description)
+
+    with pytest.raises(ValueError):
+        service.operation("UnknownOperation")
+
+def test_service_operation_decorator_infer_operation_name():
+    data = {"name": "service", "operations":["operation_name"]}
+    description = ServiceDescription(data)
+    service = Service(description)
+    service._wrap_func = dumb_func_wrapper()
+
+    def operation_name():
+        pass
+
+    assert operation_name is service.operation(operation_name)
+
+def test_service_operation_decorator_returns_decorator():
+    data = {"name": "service", "operations":["operation_name"]}
+    description = ServiceDescription(data)
+    service = Service(description)
+    service._wrap_func = dumb_func_wrapper()
+
+    def operation_name():
+        pass
+
+    decorator = service.operation("operation_name")
+    assert callable(decorator)
+    assert operation_name is decorator(operation_name)
+
+
 #===========================
 #
 # Helpers for testing
@@ -1247,3 +1280,8 @@ def mock_bottle(string=""):
     mock_bottle.request = Container()
     mock_bottle.request.body = six.BytesIO(six.b(string))
     return mock_bottle
+
+def dumb_func_wrapper():
+    def wrap(operation, func, **kwargs):
+        return func
+    return wrap

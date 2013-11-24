@@ -81,6 +81,9 @@ class Service(object):
             func, name = name, name.__name__
             name = func.__name__
 
+        if name not in self.description.operations:
+            raise ValueError("Unknown Operation '{}'".format(name))
+
         wrap = lambda func: self._wrap_func(name, func, **kwargs)
 
         # service.operation("name", operation)
