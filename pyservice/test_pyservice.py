@@ -3,6 +3,7 @@ import json
 import pytest
 import requests
 import tempfile
+import bottle
 from contextlib import contextmanager
 from collections import defaultdict
 
@@ -1058,6 +1059,46 @@ def test_service_config_fallbacks():
     service._run_config["metakey"] = "run_config"
     assert "run_config" == service._attr("metakey", "default")
 
+def test_service_bottle_call_unknown_operation():
+    data = {"name": "service"}
+    description = ServiceDescription(data)
+    service = Service(description)
+
+    with pytest.raises(bottle.HTTPError):
+        service._bottle_call("UnknownOperation")
+
+def test_service_bottle_call_raises_when_call_raises():
+    data = {"name": "service", "operations": ["operation"]}
+    description = ServiceDescription(data)
+    service = Service(description)
+
+    def mock_call(operation, body):
+        raise ValueError("service._call raised")
+    service._call = mock_call
+    service._bottle = mock_bottle()
+
+    with pytest.raises(bottle.HTTPError):
+        service._bottle_call("operation")
+
+def test_service_bottle_call_passes_operation_correctly():
+    data = {"name": "service", "operations": ["operation"]}
+    description = ServiceDescription(data)
+    service = Service(description)
+
+    expected_operation = "operation"
+    expected_body = "hello, this is body"
+    expected_return = "no, this is patrick"
+
+    def mock_call(operation, body):
+        assert expected_operation == operation
+        assert expected_body == body
+        return expected_return
+    service._call = mock_call
+    service._bottle = mock_bottle(expected_body)
+
+    assert expected_return == service._bottle_call("operation")
+
+
 #===========================
 #
 # Helpers for testing
@@ -1161,3 +1202,13 @@ def dumb_client(data):
         raise BaseException("Handler called")
     client._wire_handler = noop
     return client
+
+def mock_bottle(string=""):
+    '''Sets (mocked)bottle.request.body = IOBytes of string'''
+    class Container(object):
+        pass
+    mock_bottle = Container()
+    mock_bottle.abort = bottle.abort
+    mock_bottle.request = Container()
+    mock_bottle.request.body = six.BytesIO(six.b(string))
+    return mock_bottle

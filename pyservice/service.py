@@ -10,6 +10,7 @@ class Service(object):
         self._init_config = config
         self._serializer = serialize.JsonSerializer()
 
+        self._bottle = bottle
         self._app = bottle.Bottle()
         route = "/{service}/<operation>".format(service=self.description.name)
         self._app.post(route)(self._bottle_call)
@@ -23,12 +24,12 @@ class Service(object):
 
     def _bottle_call(self, operation):
         if operation not in self.description.operations:
-            bottle.abort(404, "Unknown Operation '{}'".format(operation))
+            self._bottle.abort(404, "Unknown Operation '{}'".format(operation))
         try:
-            body = bottle.request.body.read().decode("utf-8")
+            body = self._bottle.request.body.read().decode("utf-8")
             return self._call(operation, body)
         except Exception:
-            bottle.abort(500, "Internal Error")
+            self._bottle.abort(500, "Internal Error")
 
     def _call(self, operation, body):
         '''
