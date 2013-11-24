@@ -97,6 +97,8 @@ def to_dict(signature, data):
     signature must be a list.
     data must be iterable.
     '''
+    if not signature:
+        return {}
     if len(data) != len(signature):
         raise ValueError("Value '{}' did not match signature '{}'".format(data, signature))
 

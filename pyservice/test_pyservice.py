@@ -501,8 +501,7 @@ def test_to_dict_no_signature_extra():
     signature = []
     data = ["extra"]
 
-    with pytest.raises(ValueError):
-        to_dict(signature, data)
+    to_dict(signature, data)
 
 def test_to_dict_one_field_no_data():
     signature = ["field"]
@@ -1360,6 +1359,49 @@ def test_service_call_returns_serialized_output():
 
     output = service._call(operation, body)
     expected_output = {"result1": "value1", "result2": "value2"}
+    assert expected_output == json.loads(output)
+
+def test_service_call_returns_serialized_output_single_value():
+    data = {"name": "service",
+        "operations":[{
+            "name": "operation_name",
+            "input": ["arg1", "arg2", "arg3"],
+            "output": ["result1"]
+        }]
+    }
+    description = ServiceDescription(data)
+    service = Service(description)
+
+    @service.operation("operation_name")
+    def func(arg1, arg2, arg3):
+        return "value1"
+
+    operation = "operation_name"
+    body = json.dumps({"arg1": "input1", "arg2": "input2", "arg3": "input3"})
+
+    output = service._call(operation, body)
+    expected_output = {"result1": "value1"}
+    assert expected_output == json.loads(output)
+
+def test_service_call_returns_serialized_output_no_value():
+    data = {"name": "service",
+        "operations":[{
+            "name": "operation_name",
+            "input": ["arg1", "arg2", "arg3"]
+        }]
+    }
+    description = ServiceDescription(data)
+    service = Service(description)
+
+    @service.operation("operation_name")
+    def func(arg1, arg2, arg3):
+        pass
+
+    operation = "operation_name"
+    body = json.dumps({"arg1": "input1", "arg2": "input2", "arg3": "input3"})
+
+    output = service._call(operation, body)
+    expected_output = {}
     assert expected_output == json.loads(output)
 
 def test_server_call_raises_on_serializer_failure():

@@ -51,6 +51,11 @@ class Service(object):
             # list -> dict
             desc_output = self.description.operations[operation].output
             signature = [field.name for field in desc_output]
+
+            # Assume that if signature has 1 (or 0, which is really 1) output field,
+            # result is correct, even if result is iterable (such as lists)
+            if len(signature) == 1:
+                result = [result]
             context = serialize.to_dict(signature, result)
 
         except Exception as exception:
@@ -84,7 +89,8 @@ class Service(object):
         if name not in self.description.operations:
             raise ValueError("Unknown Operation '{}'".format(name))
 
-        wrap = lambda func: self._wrap_func(name, func, **kwargs)
+        def wrap(func):
+            return self._wrap_func(name, func, **kwargs)
 
         # service.operation("name", operation)
         if callable(func):
