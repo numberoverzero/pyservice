@@ -1098,6 +1098,41 @@ def test_service_bottle_call_passes_operation_correctly():
 
     assert expected_return == service._bottle_call("operation")
 
+def test_service_handle_whitelisted_exception():
+    data = {"name": "service", "exceptions": ["MyException"]}
+    description = ServiceDescription(data)
+    service = Service(description)
+    class MyException(Exception):
+        pass
+    exception = MyException()
+    data = service._handle_exception(exception)
+    assert 2 == len(data)
+    assert "MyException" == data["cls"]
+    assert not data["args"]
+
+def test_service_handle_non_whitelisted_exception():
+    data = {"name": "service"}
+    description = ServiceDescription(data)
+    service = Service(description)
+    class MyException(Exception):
+        pass
+    exception = MyException()
+    data = service._handle_exception(exception)
+    assert 2 == len(data)
+    assert "ServiceException" == data["cls"]
+    assert ["Internal Error"] == data["args"]
+
+def test_service_handle_non_whitelisted_exception_while_debugging():
+    data = {"name": "service"}
+    description = ServiceDescription(data)
+    service = Service(description, debug=True)
+    class MyException(Exception):
+        pass
+    exception = MyException(1,2, 3)
+    data = service._handle_exception(exception)
+    assert 2 == len(data)
+    assert "MyException" == data["cls"]
+    assert (1, 2, 3) == data["args"]
 
 #===========================
 #

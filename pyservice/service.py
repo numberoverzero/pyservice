@@ -63,8 +63,7 @@ class Service(object):
         cls = exception.__class__.__name__
         args = exception.args
 
-        allowed_exceptions = [ex.name for ex in self.description.exceptions]
-        whitelisted = cls in allowed_exceptions
+        whitelisted = cls in self.description.exceptions
         debugging = self._attr("debug", False)
         if not whitelisted and not debugging:
             cls = "ServiceException"
@@ -76,7 +75,7 @@ class Service(object):
         }
 
     def operation(self, name=None, func=None, **kwargs):
-        # @service
+        # @service.operation
         # def name(arg):
         if callable(name):
             func, name = name, name.__name__
