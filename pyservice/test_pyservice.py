@@ -1185,6 +1185,75 @@ def test_service_operation_decorator_returns_decorator():
     assert callable(decorator)
     assert operation_name is decorator(operation_name)
 
+def test_service_wrap_func_with_vargs():
+    data = {"name": "service", "operations":[{"name": "operation_name", "input": ["arg1", "arg2"]}]}
+    description = ServiceDescription(data)
+    service = Service(description)
+
+    with pytest.raises(ValueError):
+        def vargs_func(arg1, *args): pass
+        service._wrap_func("operation_name", vargs_func)
+
+    with pytest.raises(ValueError):
+        def vargs_func(arg1, arg2, *args): pass
+        service._wrap_func("operation_name", vargs_func)
+
+def test_service_wrap_func_with_kwargs():
+    data = {"name": "service", "operations":[{"name": "operation_name", "input": ["arg1", "arg2"]}]}
+    description = ServiceDescription(data)
+    service = Service(description)
+
+    with pytest.raises(ValueError):
+        def vargs_func(arg1, **kwargs): pass
+        service._wrap_func("operation_name", vargs_func)
+
+    with pytest.raises(ValueError):
+        def vargs_func(arg1, arg2, **kwargs): pass
+        service._wrap_func("operation_name", vargs_func)
+
+def test_service_wrap_func_bad_sig_missing_args():
+    data = {"name": "service", "operations":[{"name": "operation_name", "input": ["arg1", "arg2"]}]}
+    description = ServiceDescription(data)
+    service = Service(description)
+
+    def func(arg1): pass
+    with pytest.raises(ValueError):
+        service._wrap_func("operation_name", func)
+
+def test_service_wrap_func_bad_sig_extra_args():
+    data = {"name": "service", "operations":[{"name": "operation_name", "input": ["arg1", "arg2"]}]}
+    description = ServiceDescription(data)
+    service = Service(description)
+
+    def func(arg1, arg2, arg3): pass
+    with pytest.raises(ValueError):
+        service._wrap_func("operation_name", func)
+
+def test_service_wrap_func_bad_wrong_args():
+    data = {"name": "service", "operations":[{"name": "operation_name", "input": ["arg1", "arg2"]}]}
+    description = ServiceDescription(data)
+    service = Service(description)
+
+    def func(arg_names, are_wrong): pass
+    with pytest.raises(ValueError):
+        service._wrap_func("operation_name", func)
+
+def test_service_wrap_func_bad_sig_args_wrong_order():
+    data = {"name": "service", "operations":[{"name": "operation_name", "input": ["arg1", "arg2"]}]}
+    description = ServiceDescription(data)
+    service = Service(description)
+
+    def func(arg2, arg1): pass
+    with pytest.raises(ValueError):
+        service._wrap_func("operation_name", func)
+
+def test_service_wrap_func_returns_original():
+    data = {"name": "service", "operations":[{"name": "operation_name", "input": ["arg1", "arg2"]}]}
+    description = ServiceDescription(data)
+    service = Service(description)
+
+    def func(arg1, arg2): pass
+    assert func is service._wrap_func("operation_name", func)
 
 #===========================
 #
