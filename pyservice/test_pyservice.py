@@ -1125,9 +1125,9 @@ def test_service_handle_whitelisted_exception():
         pass
     exception = MyException()
     data = service._handle_exception(exception)
-    assert 2 == len(data)
-    assert "MyException" == data["cls"]
-    assert not data["args"]
+    assert 1 == len(data)
+    assert "MyException" == data["__exception"]["cls"]
+    assert not data["__exception"]["args"]
 
 def test_service_handle_non_whitelisted_exception():
     data = {"name": "service"}
@@ -1137,9 +1137,9 @@ def test_service_handle_non_whitelisted_exception():
         pass
     exception = MyException()
     data = service._handle_exception(exception)
-    assert 2 == len(data)
-    assert "ServiceException" == data["cls"]
-    assert ["Internal Error"] == data["args"]
+    assert 1 == len(data)
+    assert "ServiceException" == data["__exception"]["cls"]
+    assert ["Internal Error"] == data["__exception"]["args"]
 
 def test_service_handle_non_whitelisted_exception_while_debugging():
     data = {"name": "service"}
@@ -1149,9 +1149,9 @@ def test_service_handle_non_whitelisted_exception_while_debugging():
         pass
     exception = MyException(1,2, 3)
     data = service._handle_exception(exception)
-    assert 2 == len(data)
-    assert "MyException" == data["cls"]
-    assert (1, 2, 3) == data["args"]
+    assert 1 == len(data)
+    assert "MyException" == data["__exception"]["cls"]
+    assert (1, 2, 3) == data["__exception"]["args"]
 
 def test_service_operation_decorator_unknown_operation():
     data = {"name": "service"}
@@ -1529,4 +1529,4 @@ class Container(object): pass
 
 def is_exception(string, exception_cls):
     data = json.loads(string)
-    return exception_cls == data["cls"]
+    return exception_cls == data["__exception"]["cls"]

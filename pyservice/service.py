@@ -69,10 +69,10 @@ class Service(object):
             cls = "ServiceException"
             args = ["Internal Error"]
 
-        return {
+        return { "__exception": {
             "cls": cls,
             "args": args
-        }
+        }}
 
     def operation(self, name=None, func=None, **kwargs):
         # @service.operation
