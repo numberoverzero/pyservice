@@ -3,6 +3,18 @@ TODO
 
 Project:
     1) Re-add layer architecture to both client + server
+    2) Proper logging - check out how this is done with bottle/gevent
+                        since the stuff that comes with a stock
+                        gevent/bottle webserver is pretty nice.
+    3) Testing refactor:
+        A) Update/remove the client requests testing, since
+                it's slow and shouldn't be necessary. It's
+                more or less testing the requests library,
+                not pyservice-specific code
+        B) Properly mock out bottle.request, even if it means
+                taking another test dependency for the mocks
+                package.  It's silly for service to have a _bottle
+                property
     2) Add Serializer for JSON-RPC 2.0
 
 Documentation:
