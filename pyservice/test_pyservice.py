@@ -1026,12 +1026,12 @@ def test_requests_handler_raises():
 
 def test_service_empty_description():
     with pytest.raises(AttributeError):
-        Client(None)
+        Service(None)
 
 def test_service_minimum_valid_description():
     data = {"name": "service"}
     description = ServiceDescription(data)
-    Client(description)
+    Service(description)
 
 def test_service_config_fallbacks():
     # Fall all the way through to default
@@ -1058,6 +1058,25 @@ def test_service_config_fallbacks():
     service = Service(description, metakey="init_config")
     service._run_config["metakey"] = "run_config"
     assert "run_config" == service._attr("metakey", "default")
+
+def test_service_run_preserves_kwargs():
+    data = {"name": "service"}
+    description = ServiceDescription(data)
+    service = Service(description)
+    service._app = Container()
+
+    run_args = [1, False, type]
+    run_kwargs = {
+        "some": "field",
+        "other": [ "string", 1, None, {} ]
+    }
+    def run(*a, **kw):
+        assert run_args == list(a)
+        assert run_kwargs == kw
+    service._app.run = run
+
+    service.run(*run_args, **run_kwargs)
+    assert "field" == service._attr("some", None)
 
 def test_service_bottle_call_unknown_operation():
     data = {"name": "service"}
@@ -1273,8 +1292,6 @@ def dumb_client(data):
 
 def mock_bottle(string=""):
     '''Sets (mocked)bottle.request.body = IOBytes of string'''
-    class Container(object):
-        pass
     mock_bottle = Container()
     mock_bottle.abort = bottle.abort
     mock_bottle.request = Container()
@@ -1285,3 +1302,5 @@ def dumb_func_wrapper():
     def wrap(operation, func, **kwargs):
         return func
     return wrap
+
+class Container(object): pass
