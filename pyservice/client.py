@@ -17,7 +17,13 @@ class Client(object):
         self._config = config
 
         for operation in self._description.operations:
-            func = lambda *args: self._call(operation, *args)
+            def make_call_op(operation):
+                # We need this nested function to create
+                # a scope for the operation variable,
+                # otherwise it gets the last value of the var
+                # in the for loop it's under.
+                return lambda *args: self._call(operation, *args)
+            func = make_call_op(operation)
             setattr(self, operation, func)
 
         uri = {
