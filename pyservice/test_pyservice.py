@@ -1255,6 +1255,159 @@ def test_service_wrap_func_returns_original():
     def func(arg1, arg2): pass
     assert func is service._wrap_func("operation_name", func)
 
+def test_service_call_missing_args():
+    data = {"name": "service", "operations":[{
+        "name": "operation_name",
+        "input": ["arg1", "arg2", "arg3"],
+        "output": ["result1", "result2"]
+    }]}
+    description = ServiceDescription(data)
+    service = Service(description)
+
+    @service.operation("operation_name")
+    def func(arg1, arg2, arg3):
+        return "value1", "value2"
+
+    operation = "operation_name"
+    body = json.dumps({"arg1": "input1", "arg2": "input2"})
+
+    output = service._call(operation, body)
+    assert is_exception(output, "ServiceException")
+
+def test_service_call_wrong_args():
+    data = {"name": "service", "operations":[{
+        "name": "operation_name",
+        "input": ["arg1", "arg2", "arg3"],
+        "output": ["result1", "result2"]
+    }]}
+    description = ServiceDescription(data)
+    service = Service(description)
+
+    @service.operation("operation_name")
+    def func(arg1, arg2, arg3):
+        return "value1", "value2"
+
+    operation = "operation_name"
+    body = json.dumps({"arg1": "input1", "arg2": "input2", "wrong": "argname"})
+
+    output = service._call(operation, body)
+    assert is_exception(output, "ServiceException")
+
+def test_service_call_raises_whitelisted_exception_on_func_raise():
+    data = {"name": "service",
+        "operations":[{
+            "name": "operation_name",
+            "input": ["arg1", "arg2", "arg3"],
+            "output": ["result1", "result2"]
+        }],
+        "exceptions": ["MyException"]
+    }
+    description = ServiceDescription(data)
+    service = Service(description)
+
+    @service.operation("operation_name")
+    def func(arg1, arg2, arg3):
+        raise MyException(1, 2, 3)
+
+    class MyException(Exception): pass
+
+    operation = "operation_name"
+    body = json.dumps({"arg1": "input1", "arg2": "input2", "arg3": "input3"})
+
+    output = service._call(operation, body)
+    assert is_exception(output, "MyException")
+
+def test_service_call_raises_service_exception_on_func_raise():
+    data = {"name": "service",
+        "operations":[{
+            "name": "operation_name",
+            "input": ["arg1", "arg2", "arg3"],
+            "output": ["result1", "result2"]
+        }]
+    }
+    description = ServiceDescription(data)
+    service = Service(description)
+
+    @service.operation("operation_name")
+    def func(arg1, arg2, arg3):
+        raise MyException(1, 2, 3)
+
+    class MyException(Exception): pass
+
+    operation = "operation_name"
+    body = json.dumps({"arg1": "input1", "arg2": "input2", "arg3": "input3"})
+
+    output = service._call(operation, body)
+    assert is_exception(output, "ServiceException")
+
+def test_service_call_returns_serialized_output():
+    data = {"name": "service",
+        "operations":[{
+            "name": "operation_name",
+            "input": ["arg1", "arg2", "arg3"],
+            "output": ["result1", "result2"]
+        }]
+    }
+    description = ServiceDescription(data)
+    service = Service(description)
+
+    @service.operation("operation_name")
+    def func(arg1, arg2, arg3):
+        return "value1", "value2"
+
+    operation = "operation_name"
+    body = json.dumps({"arg1": "input1", "arg2": "input2", "arg3": "input3"})
+
+    output = service._call(operation, body)
+    expected_output = {"result1": "value1", "result2": "value2"}
+    assert expected_output == json.loads(output)
+
+def test_server_call_raises_on_serializer_failure():
+    data = {"name": "service",
+        "operations":[{
+            "name": "operation_name",
+            "input": ["arg1", "arg2", "arg3"],
+            "output": ["result1", "result2"]
+        }]
+    }
+    description = ServiceDescription(data)
+    service = Service(description)
+
+    @service.operation("operation_name")
+    def func(arg1, arg2, arg3):
+        return "value1", "value2"
+
+    # json.encoder throws TypeError: <type 'NameError'> is not JSON serializable
+    #with pytest.raises(TypeError):
+    #    client._call("operation", "arg1", NameError)
+    operation = "operation_name"
+    body = '{"name": [],}}'
+
+    with pytest.raises(ValueError):
+        service._call(operation, body)
+
+def test_server_call_raises_on_deserializer_failure():
+    data = {"name": "service",
+        "operations":[{
+            "name": "operation_name",
+            "input": ["arg1", "arg2", "arg3"],
+            "output": ["result1", "result2"]
+        }]
+    }
+    description = ServiceDescription(data)
+    service = Service(description)
+
+    @service.operation("operation_name")
+    def func(arg1, arg2, arg3):
+        return "value1", NameError
+
+    operation = "operation_name"
+    body = json.dumps({"arg1": "input1", "arg2": "input2", "arg3": "input3"})
+
+    # json.encoder throws TypeError: <type 'NameError'> is not JSON serializable
+    with pytest.raises(TypeError):
+        service._call(operation, body)
+
 #===========================
 #
 # Helpers for testing
@@ -1373,3 +1526,7 @@ def dumb_func_wrapper():
     return wrap
 
 class Container(object): pass
+
+def is_exception(string, exception_cls):
+    data = json.loads(string)
+    return exception_cls == data["cls"]
