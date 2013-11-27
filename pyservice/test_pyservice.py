@@ -1,3 +1,4 @@
+import re
 import six
 import json
 import pytest
@@ -1404,7 +1405,7 @@ def test_service_call_returns_serialized_output_no_value():
     expected_output = {}
     assert expected_output == json.loads(output)
 
-def test_server_call_raises_on_serializer_failure():
+def test_server_call_raises_on_deserialize_failure():
     data = {"name": "service",
         "operations":[{
             "name": "operation_name",
@@ -1419,16 +1420,13 @@ def test_server_call_raises_on_serializer_failure():
     def func(arg1, arg2, arg3):
         return "value1", "value2"
 
-    # json.encoder throws TypeError: <type 'NameError'> is not JSON serializable
-    #with pytest.raises(TypeError):
-    #    client._call("operation", "arg1", NameError)
     operation = "operation_name"
     body = '{"name": [],}}'
 
     with pytest.raises(ValueError):
         service._call(operation, body)
 
-def test_server_call_raises_on_deserializer_failure():
+def test_server_call_raises_on_serialize_failure():
     data = {"name": "service",
         "operations":[{
             "name": "operation_name",
@@ -1449,6 +1447,57 @@ def test_server_call_raises_on_deserializer_failure():
     # json.encoder throws TypeError: <type 'NameError'> is not JSON serializable
     with pytest.raises(TypeError):
         service._call(operation, body)
+
+#===========================
+#
+# End-to-end tests
+#
+#===========================
+
+def test_e2e_no_return():
+    data = {"name": "service",
+        "operations":[{
+            "name": "signal",
+            "input": ["arg1"],
+        }]
+    }
+    description = ServiceDescription(data)
+    client = Client(description)
+    service = Service(description)
+    connect(client, service)
+
+    called = [False]
+    @service.operation
+    def signal(arg1):
+        called[0] = True
+
+    assert None == client.signal("foo")
+    assert called[0]
+
+def test_e2e_single_return():
+    data = {"name": "service",
+        "operations":[{
+            "name": "echo",
+            "input": ["arg1"],
+            "output": ["out1"]
+        }]
+    }
+    description = ServiceDescription(data)
+    client = Client(description)
+    service = Service(description)
+    connect(client, service)
+
+    called = [False]
+    @service.operation
+    def echo(arg1):
+        called[0] = True
+        return arg1
+
+    values = 
+    for value in ["foo", None, False, -1]:
+        called[0] = False
+        assert value == client.echo(value)
+        assert called[0]
 
 #===========================
 #
@@ -1572,3 +1621,16 @@ class Container(object): pass
 def is_exception(string, exception_cls):
     data = json.loads(string)
     return exception_cls == data["__exception"]["cls"]
+
+def connect(client, service):
+    '''
+    Hook service._call up directly as the client's wire_handler
+    Only works when client sends a well-formed uri to the wire handler.
+
+    This allows testing pyservice end-to-end without requests/bottle dependencies
+    '''
+    URI_RE = re.compile(client._uri.replace('{operation}', '(.*)'))
+    def wire_handler(uri, data='', **kwargs):
+        operation = URI_RE.match(uri).groups()[0]
+        return service._call(operation, data)
+    client._wire_handler = wire_handler
