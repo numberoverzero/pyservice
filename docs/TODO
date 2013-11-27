@@ -2,6 +2,9 @@ TODO
 ========================
 
 Project:
+    0) Create universal description for testing that can be used in each step,
+        instead of re-defining it in every test.  Saves a lot of space in each test
+        and makes the behavior being tested much clearer.
     1) Re-add layer architecture to both client + server
     2) Proper logging - check out how this is done with bottle/gevent
                         since the stuff that comes with a stock
