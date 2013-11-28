@@ -1493,7 +1493,6 @@ def test_e2e_single_return():
         called[0] = True
         return arg1
 
-    values = 
     for value in ["foo", None, False, -1]:
         called[0] = False
         assert value == client.echo(value)
