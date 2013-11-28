@@ -17,10 +17,13 @@ class Service(object):
 
     def _attr(self, key, default):
         '''Load value - presedence is run config -> init config -> description meta -> default'''
-        value = self._run_config.get(key, None)
-        value = value or self._init_config.get(key, None)
-        value = value or self.description.metadata.get(key, None)
-        return value or default
+        if key in self._run_config:
+            return self._run_config[key]
+        if key in self._init_config:
+            return self._init_config[key]
+        if key in self.description.metadata:
+            return self.description.metadata[key]
+        return default
 
     def _bottle_call(self, operation):
         if operation not in self.description.operations:

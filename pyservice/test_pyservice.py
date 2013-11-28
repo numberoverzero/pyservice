@@ -830,6 +830,14 @@ def test_client_config_fallbacks():
     client = Client(description, metakey="config")
     assert "config" == client._attr("metakey", "default")
 
+def test_client_config_falsey_values():
+    data = {"name": "client", "metakey": True}
+    description = ServiceDescription(data)
+    client = Client(description, metakey=False)
+
+    # Should get false, since init config overrides description metadata
+    assert False is client._attr("metakey", None)
+
 def test_client_default_uri_and_timeout():
     client = basic_client()
     assert "http://localhost:8080/service/{operation}" == client._uri
@@ -1032,6 +1040,14 @@ def test_service_config_fallbacks():
     service = Service(description, metakey="init_config")
     service._run_config["metakey"] = "run_config"
     assert "run_config" == service._attr("metakey", "default")
+
+def test_service_config_falsey_values():
+    data = {"name": "service", "metakey": True}
+    description = ServiceDescription(data)
+    service = Service(description, metakey=False)
+
+    # Should get false, since init config overrides description metadata
+    assert False is service._attr("metakey", None)
 
 def test_service_run_preserves_kwargs():
     data = {"name": "service"}

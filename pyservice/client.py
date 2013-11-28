@@ -38,11 +38,13 @@ class Client(object):
         self._timeout = self._attr("timeout", 5)
         self.exceptions = ExceptionContainer()
 
-    def _attr(self, key, default):
+    def _attr(self, key, default=None):
         '''Load value - presedence is config -> description meta -> default'''
-        value = self._config.get(key, None)
-        value = value or self._description.metadata.get(key, None)
-        return value or default
+        if key in self._config:
+            return self._config[key]
+        if key in self._description.metadata:
+            return self._description.metadata[key]
+        return default
 
     def _call(self, operation, *args):
         uri = self._uri.format(operation=operation)
