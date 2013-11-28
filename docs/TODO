@@ -2,21 +2,23 @@ TODO
 ========================
 
 Project:
-    1) Refactor entire layout:
-        pyservice
-            |
-            |- __init__.py
-            |- service.py
-            |- client.py
-            |- description.py
-            |- validation.py
-            |- layer.py
-    2) Move to JSON-RPC 2.0
-    3) Refactor exceptions to live on client/service:
-        try:
-            print client.get_task(task_id)
-        except client.exceptions.UnknownTaskId as e:
-            print e
+    0) Create universal description for testing that can be used in each step,
+        instead of re-defining it in every test.  Saves a lot of space in each test
+        and makes the behavior being tested much clearer.
+    1) Re-add layer architecture to both client + server
+    2) Proper logging - check out how this is done with bottle/gevent
+                        since the stuff that comes with a stock
+                        gevent/bottle webserver is pretty nice.
+    3) Testing refactor:
+        A) Update/remove the client requests testing, since
+                it's slow and shouldn't be necessary. It's
+                more or less testing the requests library,
+                not pyservice-specific code
+        B) Properly mock out bottle.request, even if it means
+                taking another test dependency for the mocks
+                package.  It's silly for service to have a _bottle
+                property
+    2) Add Serializer for JSON-RPC 2.0
 
 Documentation:
     docstrings for all top-level classes
@@ -24,39 +26,3 @@ Documentation:
 
 Description file:
     Formal specification of format
-    Support input/ouput shorthand:
-        {
-            "name": "ServiceName",
-            "operations": [
-                {
-                    "name": "OperationName",
-                    "input": "username",
-                    "output": "userid"
-                }
-            ]
-        }
-    Support input/output metadata:
-        {
-            "name": "ServiceName",
-            "operations": [
-                {
-                    "name": "OperationName",
-                    "input": [
-                        {
-                            "name": "username",
-                            "type": "String",
-                            "validation": "^[a-zA-z]{3,12}$"
-                        },
-                        "validation_token"
-                    ],
-                    "output": "userid"
-                }
-            ]
-        }
-
-Client:
-    Move to
-
-Server:
-    Exceptions:
-        Testing (including nested layer catching)

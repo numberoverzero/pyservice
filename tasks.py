@@ -9,6 +9,9 @@ def clean():
     run("rm -rf .tox/")
     run("rm -rf dist/")
     run("rm -rf pyservice.egg-info/")
+    run("find . -name '*.pyc' -delete")
+    run("find . -name '__pycache__' -delete")
+    run("rm -f .coverage")
 
 @invoke.task('clean')
 def build():
@@ -18,3 +21,7 @@ def build():
 @invoke.task('clean')
 def test():
     run('tox')
+
+@invoke.task('clean')
+def coverage():
+    run('tox -e py27')
