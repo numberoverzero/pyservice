@@ -2,7 +2,6 @@ import re
 import six
 import json
 import pytest
-import requests
 import tempfile
 import bottle
 from contextlib import contextmanager
@@ -20,7 +19,7 @@ from pyservice.description import (
 from pyservice.layer import Layer, Stack
 from pyservice.serialize import JsonSerializer, to_list, to_dict
 from pyservice.util import cached, cached_property
-from pyservice.client import Client, requests_wire_handler
+from pyservice.client import Client
 from pyservice.service import Service
 
 #===========================
@@ -998,25 +997,6 @@ def test_client_handle_exception_no_raise():
         }
     }
     client._handle_exception(context)
-
-#===========================
-#
-# requests_wire_handler
-#
-#===========================
-
-def test_requests_handler_success():
-    uri = "http://httpbin.org/post"
-    data = ''
-    timeout = 1
-    assert requests_wire_handler(uri, data=data, timeout=timeout)
-
-def test_requests_handler_raises():
-    uri = "http://google.com"
-    data = ''
-    timeout = 1
-    with pytest.raises(requests.exceptions.HTTPError):
-        requests_wire_handler(uri, data=data, timeout=timeout)
 
 #===========================
 #

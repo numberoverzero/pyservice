@@ -4,7 +4,7 @@ import requests
 from pyservice import serialize
 from pyservice.exception_factory import ExceptionContainer
 
-def requests_wire_handler(uri, data='', timeout=None):
+def requests_wire_handler(uri, data='', timeout=None):  # pragma: no cover
     '''Adapter for requests library'''
     response = requests.post(uri, data=data, timeout=timeout)
     response.raise_for_status()
