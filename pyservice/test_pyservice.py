@@ -22,9 +22,42 @@ from pyservice.util import cached, cached_property
 from pyservice.client import Client
 from pyservice.service import Service
 
+# Common description for testing Client, Service
+basic_description = ServiceDescription({
+    "name": "service",
+    "operations": [
+        "void",
+        {
+            "name": "signal",
+            "input": ["exec_id"]
+        },
+        {
+            "name": "echo",
+            "input": ["value"],
+            "output": ["value"]
+        },
+        {
+            "name": "multiecho",
+            "input": ["value1", "value2"],
+            "output": ["value1", "value2"]
+        }
+    ],
+    "exceptions": [
+        "WhitelistedException",
+        "AnotherWhitelistedException"
+    ]
+})
+def basic_client(**config):
+    return Client(basic_description, **config)
+
+def basic_service(**config):
+    return Service(basic_description, **config)
+
 #===========================
 #
-# Description helpers
+# Description helpers:
+#     validate_name,
+#     parse_metadata
 #
 #===========================
 
@@ -759,28 +792,24 @@ def test_client_minimum_valid_description():
     Client(description)
 
 def test_client_exceptions():
-    data = {"name": "client", "exceptions": ["Exception1", "Exception2"]}
-    description = ServiceDescription(data)
-    client = Client(description)
+    client = basic_client()
 
-    def raise_ex1():
-        raise client.exceptions.Exception1()
+    def raise_ex():
+        raise client.exceptions.WhitelistedException()
 
-    with pytest.raises(client.exceptions.Exception1):
-        raise_ex1()
+    with pytest.raises(client.exceptions.WhitelistedException):
+        raise_ex()
 
     # Can raise un-listed exceptions
     with pytest.raises(Exception):
         raise client.exceptions.DynamicExceptionClass("arg1", "arg2")
 
 def test_client_operations_created():
-    ops = ["op_"+str(i) for i in range(100)]
-    data = {"name": "client", "operations": ops}
-    description = ServiceDescription(data)
-    client = Client(description)
+    operations = ["void", "signal", "echo", "multiecho"]
+    client = basic_client()
 
     validate = lambda op: callable(getattr(client, op))
-    assert all(map(validate, ops))
+    assert all(map(validate, operations))
 
 def test_client_config_fallbacks():
     # Fall all the way through to default
@@ -802,153 +831,124 @@ def test_client_config_fallbacks():
     assert "config" == client._attr("metakey", "default")
 
 def test_client_default_uri_and_timeout():
-    data = {"name": "client"}
-    client = dumb_client(data)
-
-    assert "http://localhost:8080/client/{operation}" == client._uri
+    client = basic_client()
+    assert "http://localhost:8080/service/{operation}" == client._uri
     assert 5 == client._timeout
 
 def test_client_call_unknown_operation():
-    data = {"name": "client"}
-    client = dumb_client(data)
-
+    client = basic_client()
     with pytest.raises(KeyError):
         client._call("UnknownOperation", 1, 2, 3)
 
 def test_client_call_missing_args():
-    data = {"name": "client", "operations": [{"name": "operation", "input": ["arg1", "arg2"]}]}
-    client = dumb_client(data)
-
+    client = basic_client()
     with pytest.raises(ValueError):
-        client._call("operation", "arg1")
+        client._call("multiecho", "only one value")
 
 def test_client_call_extra_args():
-    data = {"name": "client", "operations": [{"name": "operation", "input": ["arg1", "arg2"]}]}
-    client = dumb_client(data)
-
+    client = basic_client()
     with pytest.raises(ValueError):
-        client._call("operation", "arg1", "arg2", "extra")
+        client._call("echo", "extra", "arg")
 
 def test_client_call_raises_on_serializer_failure():
-    data = {"name": "client", "operations": [{"name": "operation", "input": ["arg1", "arg2"]}]}
-    client = dumb_client(data)
+    client = basic_client()
 
     # json.encoder throws TypeError: <type 'NameError'> is not JSON serializable
     with pytest.raises(TypeError):
-        client._call("operation", "arg1", NameError)
+        client._call("echo", NameError)
 
 def test_client_call_raises_on_deserializer_failure():
-    data = {"name": "client", "operations": ["operation1"]}
-    description = ServiceDescription(data)
-    client = Client(description)
-
+    client = basic_client()
     def malformed_handler(*a, **kw):
         return '{"name": [,}'
     client._wire_handler = malformed_handler
 
     with pytest.raises(ValueError):
-        client._call("operation1")
+        client._call("void")
 
 def test_client_call_raises_exception_from_wire():
-    data = {"name": "client", "operations": ["operation1"]}
-    description = ServiceDescription(data)
-    client = Client(description)
+    client = basic_client()
     class RealException(Exception):
         pass
     exception_args = ["message", 1, 2, 3]
     client._wire_handler = dumb_wire_handler(exception=RealException(*exception_args))
     with pytest.raises(client.exceptions.RealException):
-        client._call("operation1")
+        client._call("void")
 
 def test_client_call_wire_missing_result():
-    data = {"name": "client", "operations": [{"name": "operation", "output": ["result1", "result2"]}]}
-    description = ServiceDescription(data)
-    client = Client(description)
+    client = basic_client()
 
-    output = {"result1": "wire_result"}
+    output = {"value1": "some value"}
     client._wire_handler = dumb_wire_handler(output=output)
 
     with pytest.raises(client.exceptions.ServiceException):
-        client._call("operation")
+        client._call("multiecho", "some value", "missing")
 
 def test_client_call_wire_wrong_results():
-    data = {"name": "client", "operations": [{"name": "operation", "output": ["result1", "result2"]}]}
-    description = ServiceDescription(data)
-    client = Client(description)
+    client = basic_client()
 
-    output = {"result1": "wire_result", "wrong": "field"}
+    output = {"value1": "some value", "wrong": "field"}
     client._wire_handler = dumb_wire_handler(output=output)
 
     with pytest.raises(client.exceptions.ServiceException):
-        client._call("operation")
+        client._call("multiecho", "some value", "other")
 
 def test_client_call_returns_none():
-    data = {"name": "client", "operations": ["operation"]}
-    description = ServiceDescription(data)
-    client = Client(description)
+    client = basic_client()
 
     # Doesn't matter if we return extra fields
     output = {"unused":"field"}
     client._wire_handler = dumb_wire_handler(output=output)
 
-    result = client._call("operation")
+    result = client._call("void")
     assert None is result
 
 def test_client_call_single_return_value():
-    data = {"name": "client", "operations": [{"name": "operation", "output": ["field"]}]}
-    description = ServiceDescription(data)
-    client = Client(description)
+    client = basic_client()
 
     # Doesn't matter if we return extra fields
-    output = {"field":"value", "unused": "unused"}
+    output = {"value": "some value", "unused": "unused"}
     client._wire_handler = dumb_wire_handler(output=output)
 
-    result = client._call("operation")
-    assert "value" == result
+    result = client._call("echo", "some value")
+    assert "some value" == result
 
 def test_client_call_none_is_valid_single_return():
-    data = {"name": "client", "operations": [{"name": "operation", "output": ["field"]}]}
-    description = ServiceDescription(data)
-    client = Client(description)
+    client = basic_client()
 
     # Doesn't matter if we return extra fields
-    output = {"field": None, "unused": "unused"}
+    output = {"value": None, "unused": "unused"}
     client._wire_handler = dumb_wire_handler(output=output)
 
-    result = client._call("operation")
+    result = client._call("echo", None)
     assert None is result
 
 def test_client_call_multiple_return_values():
-    data = {"name": "client", "operations": [{"name": "operation", "output": ["field1", "field2"]}]}
-    description = ServiceDescription(data)
-    client = Client(description)
+    client = basic_client()
 
-    output = {"field1": "value1", "field2": "value2"}
+    output = {"value1": "value1", "value2": "value2"}
     client._wire_handler = dumb_wire_handler(output=output)
 
-    result1, result2 = client._call("operation")
+    result1, result2 = client._call("multiecho", "value1", "value2")
     assert "value1" == result1
     assert "value2" == result2
 
 def test_client_operation_building():
-    data = {"name": "client", "operations": [{"name": "my_operation", "input": ["arg1", "arg2"]}]}
-    client = dumb_client(data)
+    client = basic_client()
 
-    assert callable(client.my_operation)
+    assert callable(client.void)
     with pytest.raises(AttributeError):
         assert not callable(client.unknown_operation)
 
 def test_client_wire_handler_exception_wrapping():
-    data = {"name": "client", "operations": [{"name": "my_operation", "input": ["arg1", "arg2"]}]}
-    description = ServiceDescription(data)
-    client = Client(description)
+    client = basic_client()
 
     def handler(*a, **kw):
         raise Exception("wire handler raised")
     client._wire_handler = handler
 
     with pytest.raises(client.exceptions.ServiceException):
-        client._call("my_operation", 1, 2)
+        client._call("void")
 
 
 def test_client_handle_exception_raises():
@@ -959,10 +959,7 @@ def test_client_handle_exception_raises():
             ex_cls = getattr(self.exceptions, exception["cls"])
             raise ex_cls(*exception["args"])
     '''
-    data = {"name": "client"}
-    description = ServiceDescription(data)
-    client = Client(description)
-
+    client = basic_client()
     context = {
         "__exception" : {
             "cls": "MyException",
@@ -974,10 +971,7 @@ def test_client_handle_exception_raises():
         client._handle_exception(context)
 
 def test_client_handle_exception_no_raise():
-    data = {"name": "client"}
-    description = ServiceDescription(data)
-    client = Client(description)
-
+    client = basic_client()
 
     # Shouldn't raise, because __exception object isn't sole context object
     context = {
@@ -1059,17 +1053,13 @@ def test_service_run_preserves_kwargs():
     assert "field" == service._attr("some", None)
 
 def test_service_bottle_call_unknown_operation():
-    data = {"name": "service"}
-    description = ServiceDescription(data)
-    service = Service(description)
+    service = basic_service()
 
     with pytest.raises(bottle.HTTPError):
         service._bottle_call("UnknownOperation")
 
 def test_service_bottle_call_raises_when_call_raises():
-    data = {"name": "service", "operations": ["operation"]}
-    description = ServiceDescription(data)
-    service = Service(description)
+    service = basic_service()
 
     def mock_call(operation, body):
         raise ValueError("service._call raised")
@@ -1077,14 +1067,12 @@ def test_service_bottle_call_raises_when_call_raises():
     service._bottle = mock_bottle()
 
     with pytest.raises(bottle.HTTPError):
-        service._bottle_call("operation")
+        service._bottle_call("void")
 
 def test_service_bottle_call_passes_operation_correctly():
-    data = {"name": "service", "operations": ["operation"]}
-    description = ServiceDescription(data)
-    service = Service(description)
+    service = basic_service()
 
-    expected_operation = "operation"
+    expected_operation = "void"
     expected_body = "hello, this is body"
     expected_return = "no, this is patrick"
 
@@ -1095,310 +1083,217 @@ def test_service_bottle_call_passes_operation_correctly():
     service._call = mock_call
     service._bottle = mock_bottle(expected_body)
 
-    assert expected_return == service._bottle_call("operation")
+    assert expected_return == service._bottle_call("void")
 
 def test_service_handle_whitelisted_exception():
-    data = {"name": "service", "exceptions": ["MyException"]}
-    description = ServiceDescription(data)
-    service = Service(description)
-    class MyException(Exception):
+    service = basic_service()
+    class WhitelistedException(Exception):
         pass
-    exception = MyException()
+    exception = WhitelistedException()
     data = service._handle_exception(exception)
     assert 1 == len(data)
-    assert "MyException" == data["__exception"]["cls"]
+    assert "WhitelistedException" == data["__exception"]["cls"]
     assert not data["__exception"]["args"]
 
 def test_service_handle_non_whitelisted_exception():
-    data = {"name": "service"}
-    description = ServiceDescription(data)
-    service = Service(description)
-    class MyException(Exception):
+    service = basic_service()
+    class NotWhitelistedException(Exception):
         pass
-    exception = MyException()
+    exception = NotWhitelistedException()
     data = service._handle_exception(exception)
     assert 1 == len(data)
     assert "ServiceException" == data["__exception"]["cls"]
     assert ["Internal Error"] == data["__exception"]["args"]
 
 def test_service_handle_non_whitelisted_exception_while_debugging():
-    data = {"name": "service"}
-    description = ServiceDescription(data)
-    service = Service(description, debug=True)
-    class MyException(Exception):
+    service = basic_service(debug=True)
+    class NotWhitelistedException(Exception):
         pass
-    exception = MyException(1,2, 3)
+    exception = NotWhitelistedException(1,2, 3)
     data = service._handle_exception(exception)
     assert 1 == len(data)
-    assert "MyException" == data["__exception"]["cls"]
+    assert "NotWhitelistedException" == data["__exception"]["cls"]
     assert (1, 2, 3) == data["__exception"]["args"]
 
 def test_service_operation_decorator_unknown_operation():
-    data = {"name": "service"}
-    description = ServiceDescription(data)
-    service = Service(description)
-
+    service = basic_service()
     with pytest.raises(ValueError):
         service.operation("UnknownOperation")
 
 def test_service_operation_decorator_infer_operation_name():
-    data = {"name": "service", "operations":["operation_name"]}
-    description = ServiceDescription(data)
-    service = Service(description)
+    service = basic_service()
     service._wrap_func = dumb_func_wrapper()
 
-    def operation_name():
+    def void():
         pass
 
-    assert operation_name is service.operation(operation_name)
+    assert void is service.operation(void)
 
 def test_service_operation_decorator_returns_decorator():
-    data = {"name": "service", "operations":["operation_name"]}
-    description = ServiceDescription(data)
-    service = Service(description)
+    service = basic_service()
     service._wrap_func = dumb_func_wrapper()
 
-    def operation_name():
-        pass
-
-    decorator = service.operation("operation_name")
+    def void(): pass
+    decorator = service.operation("void")
     assert callable(decorator)
-    assert operation_name is decorator(operation_name)
+    assert void is decorator(void)
 
 def test_service_wrap_func_with_vargs():
-    data = {"name": "service", "operations":[{"name": "operation_name", "input": ["arg1", "arg2"]}]}
-    description = ServiceDescription(data)
-    service = Service(description)
+    service = basic_service()
 
     with pytest.raises(ValueError):
         def vargs_func(arg1, *args): pass
-        service._wrap_func("operation_name", vargs_func)
+        service._wrap_func("echo", vargs_func)
 
     with pytest.raises(ValueError):
         def vargs_func(arg1, arg2, *args): pass
-        service._wrap_func("operation_name", vargs_func)
+        service._wrap_func("multiecho", vargs_func)
 
 def test_service_wrap_func_with_kwargs():
-    data = {"name": "service", "operations":[{"name": "operation_name", "input": ["arg1", "arg2"]}]}
-    description = ServiceDescription(data)
-    service = Service(description)
+    service = basic_service()
 
     with pytest.raises(ValueError):
         def vargs_func(arg1, **kwargs): pass
-        service._wrap_func("operation_name", vargs_func)
+        service._wrap_func("echo", vargs_func)
 
     with pytest.raises(ValueError):
         def vargs_func(arg1, arg2, **kwargs): pass
-        service._wrap_func("operation_name", vargs_func)
+        service._wrap_func("multiecho", vargs_func)
 
 def test_service_wrap_func_bad_sig_missing_args():
-    data = {"name": "service", "operations":[{"name": "operation_name", "input": ["arg1", "arg2"]}]}
-    description = ServiceDescription(data)
-    service = Service(description)
+    service = basic_service()
 
-    def func(arg1): pass
+    def func(): pass
     with pytest.raises(ValueError):
-        service._wrap_func("operation_name", func)
+        service._wrap_func("echo", func)
 
 def test_service_wrap_func_bad_sig_extra_args():
-    data = {"name": "service", "operations":[{"name": "operation_name", "input": ["arg1", "arg2"]}]}
-    description = ServiceDescription(data)
-    service = Service(description)
+    service = basic_service()
 
-    def func(arg1, arg2, arg3): pass
+    def func(extra_arg1): pass
     with pytest.raises(ValueError):
-        service._wrap_func("operation_name", func)
+        service._wrap_func("void", func)
 
 def test_service_wrap_func_bad_wrong_args():
-    data = {"name": "service", "operations":[{"name": "operation_name", "input": ["arg1", "arg2"]}]}
-    description = ServiceDescription(data)
-    service = Service(description)
+    service = basic_service()
 
     def func(arg_names, are_wrong): pass
     with pytest.raises(ValueError):
-        service._wrap_func("operation_name", func)
+        service._wrap_func("multiecho", func)
 
 def test_service_wrap_func_bad_sig_args_wrong_order():
-    data = {"name": "service", "operations":[{"name": "operation_name", "input": ["arg1", "arg2"]}]}
-    description = ServiceDescription(data)
-    service = Service(description)
+    service = basic_service()
 
-    def func(arg2, arg1): pass
+    def func(value2, value1): pass
     with pytest.raises(ValueError):
-        service._wrap_func("operation_name", func)
+        service._wrap_func("multiecho", func)
 
 def test_service_wrap_func_returns_original():
-    data = {"name": "service", "operations":[{"name": "operation_name", "input": ["arg1", "arg2"]}]}
-    description = ServiceDescription(data)
-    service = Service(description)
+    service = basic_service()
 
-    def func(arg1, arg2): pass
-    assert func is service._wrap_func("operation_name", func)
+    def func(value): pass
+    assert func is service._wrap_func("echo", func)
 
 def test_service_call_missing_args():
-    data = {"name": "service", "operations":[{
-        "name": "operation_name",
-        "input": ["arg1", "arg2", "arg3"],
-        "output": ["result1", "result2"]
-    }]}
-    description = ServiceDescription(data)
-    service = Service(description)
+    service = basic_service()
 
-    @service.operation("operation_name")
-    def func(arg1, arg2, arg3):
-        return "value1", "value2"
+    @service.operation("multiecho")
+    def func(value1, value2):
+        return value1, value2
 
-    operation = "operation_name"
-    body = json.dumps({"arg1": "input1", "arg2": "input2"})
-
+    operation = "multiecho"
+    body = json.dumps({"value1": "some value"})
     output = service._call(operation, body)
     assert is_exception(output, "ServiceException")
 
 def test_service_call_wrong_args():
-    data = {"name": "service", "operations":[{
-        "name": "operation_name",
-        "input": ["arg1", "arg2", "arg3"],
-        "output": ["result1", "result2"]
-    }]}
-    description = ServiceDescription(data)
-    service = Service(description)
+    service = basic_service()
 
-    @service.operation("operation_name")
-    def func(arg1, arg2, arg3):
-        return "value1", "value2"
+    @service.operation("multiecho")
+    def func(value1, value2):
+        return value1, value2
 
-    operation = "operation_name"
-    body = json.dumps({"arg1": "input1", "arg2": "input2", "wrong": "argname"})
-
+    operation = "multiecho"
+    body = json.dumps({"value1": "some value", "wrong": "argname"})
     output = service._call(operation, body)
     assert is_exception(output, "ServiceException")
 
 def test_service_call_raises_whitelisted_exception_on_func_raise():
-    data = {"name": "service",
-        "operations":[{
-            "name": "operation_name",
-            "input": ["arg1", "arg2", "arg3"],
-            "output": ["result1", "result2"]
-        }],
-        "exceptions": ["MyException"]
-    }
-    description = ServiceDescription(data)
-    service = Service(description)
+    service = basic_service()
 
-    @service.operation("operation_name")
-    def func(arg1, arg2, arg3):
-        raise MyException(1, 2, 3)
+    @service.operation("echo")
+    def func(value):
+        raise WhitelistedException
+    class WhitelistedException(Exception): pass
 
-    class MyException(Exception): pass
-
-    operation = "operation_name"
-    body = json.dumps({"arg1": "input1", "arg2": "input2", "arg3": "input3"})
-
+    operation = "echo"
+    body = json.dumps({"value": "some value"})
     output = service._call(operation, body)
-    assert is_exception(output, "MyException")
+    assert is_exception(output, "WhitelistedException")
 
 def test_service_call_raises_service_exception_on_func_raise():
-    data = {"name": "service",
-        "operations":[{
-            "name": "operation_name",
-            "input": ["arg1", "arg2", "arg3"],
-            "output": ["result1", "result2"]
-        }]
-    }
-    description = ServiceDescription(data)
-    service = Service(description)
+    service = basic_service()
 
-    @service.operation("operation_name")
-    def func(arg1, arg2, arg3):
-        raise MyException(1, 2, 3)
+    @service.operation("echo")
+    def func(value):
+        raise NotWhitelistedException(1, 2, 3)
 
-    class MyException(Exception): pass
+    class NotWhitelistedException(Exception): pass
 
-    operation = "operation_name"
-    body = json.dumps({"arg1": "input1", "arg2": "input2", "arg3": "input3"})
+    operation = "echo"
+    body = json.dumps({"value": "some value"})
 
     output = service._call(operation, body)
     assert is_exception(output, "ServiceException")
 
 def test_service_call_returns_serialized_output():
-    data = {"name": "service",
-        "operations":[{
-            "name": "operation_name",
-            "input": ["arg1", "arg2", "arg3"],
-            "output": ["result1", "result2"]
-        }]
-    }
-    description = ServiceDescription(data)
-    service = Service(description)
+    service = basic_service()
 
-    @service.operation("operation_name")
-    def func(arg1, arg2, arg3):
-        return "value1", "value2"
+    @service.operation("multiecho")
+    def func(value1, value2):
+        return value1, value2
 
-    operation = "operation_name"
-    body = json.dumps({"arg1": "input1", "arg2": "input2", "arg3": "input3"})
+    operation = "multiecho"
+    body = json.dumps({"value1": "some value", "value2": "other value"})
 
     output = service._call(operation, body)
-    expected_output = {"result1": "value1", "result2": "value2"}
+    expected_output = {"value1": "some value", "value2": "other value"}
     assert expected_output == json.loads(output)
 
 def test_service_call_returns_serialized_output_single_value():
-    data = {"name": "service",
-        "operations":[{
-            "name": "operation_name",
-            "input": ["arg1", "arg2", "arg3"],
-            "output": ["result1"]
-        }]
-    }
-    description = ServiceDescription(data)
-    service = Service(description)
+    service = basic_service()
 
-    @service.operation("operation_name")
-    def func(arg1, arg2, arg3):
-        return "value1"
+    @service.operation("echo")
+    def func(value):
+        return value
 
-    operation = "operation_name"
-    body = json.dumps({"arg1": "input1", "arg2": "input2", "arg3": "input3"})
+    operation = "echo"
+    body = json.dumps({"value": "some value"})
 
     output = service._call(operation, body)
-    expected_output = {"result1": "value1"}
+    expected_output = {"value": "some value"}
     assert expected_output == json.loads(output)
 
 def test_service_call_returns_serialized_output_no_value():
-    data = {"name": "service",
-        "operations":[{
-            "name": "operation_name",
-            "input": ["arg1", "arg2", "arg3"]
-        }]
-    }
-    description = ServiceDescription(data)
-    service = Service(description)
+    service = basic_service()
 
-    @service.operation("operation_name")
-    def func(arg1, arg2, arg3):
-        pass
+    @service.operation("signal")
+    def func(exec_id):
+        return None
 
-    operation = "operation_name"
-    body = json.dumps({"arg1": "input1", "arg2": "input2", "arg3": "input3"})
+    operation = "signal"
+    body = json.dumps({"exec_id": "some id"})
 
     output = service._call(operation, body)
     expected_output = {}
     assert expected_output == json.loads(output)
 
 def test_server_call_raises_on_deserialize_failure():
-    data = {"name": "service",
-        "operations":[{
-            "name": "operation_name",
-            "input": ["arg1", "arg2", "arg3"],
-            "output": ["result1", "result2"]
-        }]
-    }
-    description = ServiceDescription(data)
-    service = Service(description)
+    service = basic_service()
 
-    @service.operation("operation_name")
-    def func(arg1, arg2, arg3):
-        return "value1", "value2"
+    @service.operation("echo")
+    def func(value):
+        return value
 
     operation = "operation_name"
     body = '{"name": [],}}'
@@ -1407,22 +1302,14 @@ def test_server_call_raises_on_deserialize_failure():
         service._call(operation, body)
 
 def test_server_call_raises_on_serialize_failure():
-    data = {"name": "service",
-        "operations":[{
-            "name": "operation_name",
-            "input": ["arg1", "arg2", "arg3"],
-            "output": ["result1", "result2"]
-        }]
-    }
-    description = ServiceDescription(data)
-    service = Service(description)
+    service = basic_service()
 
-    @service.operation("operation_name")
-    def func(arg1, arg2, arg3):
-        return "value1", NameError
+    @service.operation("echo")
+    def func(value):
+        return NameError
 
-    operation = "operation_name"
-    body = json.dumps({"arg1": "input1", "arg2": "input2", "arg3": "input3"})
+    operation = "echo"
+    body = json.dumps({"value": "some value"})
 
     # json.encoder throws TypeError: <type 'NameError'> is not JSON serializable
     with pytest.raises(TypeError):
@@ -1435,43 +1322,28 @@ def test_server_call_raises_on_serialize_failure():
 #===========================
 
 def test_e2e_no_return():
-    data = {"name": "service",
-        "operations":[{
-            "name": "signal",
-            "input": ["arg1"],
-        }]
-    }
-    description = ServiceDescription(data)
-    client = Client(description)
-    service = Service(description)
+    client = basic_client()
+    service = basic_service()
     connect(client, service)
 
     called = [False]
     @service.operation
-    def signal(arg1):
+    def signal(exec_id):
         called[0] = True
 
     assert None == client.signal("foo")
     assert called[0]
 
 def test_e2e_single_return():
-    data = {"name": "service",
-        "operations":[{
-            "name": "echo",
-            "input": ["arg1"],
-            "output": ["out1"]
-        }]
-    }
-    description = ServiceDescription(data)
-    client = Client(description)
-    service = Service(description)
+    client = basic_client()
+    service = basic_service()
     connect(client, service)
 
     called = [False]
     @service.operation
-    def echo(arg1):
+    def echo(value):
         called[0] = True
-        return arg1
+        return value
 
     for value in ["foo", None, False, -1]:
         called[0] = False
