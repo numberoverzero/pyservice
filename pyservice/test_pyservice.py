@@ -1366,6 +1366,22 @@ def test_e2e_single_return():
         assert value == client.echo(value)
         assert called[0]
 
+def test_e2e_multiple_return():
+    client = basic_client()
+    service = basic_service()
+    connect(client, service)
+
+    called = [False]
+    @service.operation
+    def multiecho(value1, value2):
+        called[0] = True
+        return value1, value2
+
+    for (value1, value2) in [(False, True), (None, "foo"), (None, None), (-1, 5)]:
+        called[0] = False
+        assert [value1, value2] == client.multiecho(value1, value2)
+        assert called[0]
+
 #===========================
 #
 # Helpers for testing
