@@ -16,7 +16,7 @@ from pyservice.description import (
     ServiceDescription,
     OperationDescription
 )
-from pyservice.layer import Layer, Stack
+from pyservice.handler import handler, Stack
 from pyservice.serialize import JsonSerializer, to_list, to_dict
 from pyservice.util import cached, cached_property
 from pyservice.client import Client
@@ -578,32 +578,74 @@ def test_to_dict_multiple_fields_extra():
 
 #===========================
 #
-# Layers
+# Handler
 #
 #===========================
 
-def test_layer_register():
-    class Registry(object):
-        registered = []
-        def _register_layer(self, layer):
-            Registry.registered.append(layer)
-    registry = Registry()
-    layer = Layer(registry)
+def test_handler_empty_handler():
+    next_called = [False]
+    def next_handler(context):
+        next_called[0] = True
 
-    assert layer in registry.registered
+    @handler
+    def empty_handler(context):
+        pass
+    context = {}
+    empty_handler(context, next_handler)
+    assert not next_called[0]
 
-def test_layer_calls_next():
-    class Callable(object):
-        called = False
-        def handle_request(self, context):
-            Callable.called = True
+def test_handler_noop_handler():
+    next_called = [False]
+    def next_handler(context):
+        next_called[0] = True
 
-    next = Callable()
+    @handler
+    def empty_handler(context):
+        yield
+    context = {}
+    empty_handler(context, next_handler)
+    assert next_called[0]
+
+def test_handler_yield_ordering():
+    order = []
+    def next_handler(context):
+        order.append("Chain")
+
+    @handler
+    def ordering_handler(context):
+        order.append("Before")
+        yield
+        order.append("After")
+
+    context = {}
+    ordering_handler(context, next_handler)
+    assert order == ["Before", "Chain", "After"]
+
+def test_handler_no_after():
+    order = []
+    def next_handler(context):
+        order.append("Chain")
+
+    @handler
+    def ordering_handler(context):
+        order.append("Before")
+        yield
+
+    context = {}
+    ordering_handler(context, next_handler)
+    assert order == ["Before", "Chain"]
+
+def test_handler_invalid_multiple_yields():
+    next_handler = lambda context: None
+
+    @handler
+    def bad_handler(context):
+        yield
+        yield
     context = {}
 
-    layer = Layer()
-    layer.handle_request(context, next)
-    assert Callable.called
+    with pytest.raises(RuntimeError):
+        bad_handler(context, next_handler)
 
 #===========================
 #
@@ -611,39 +653,7 @@ def test_layer_calls_next():
 #
 #===========================
 
-def test_empty_stack():
-    stack = Stack()
-    stack.handle_request({})
 
-def test_stack_executes_once():
-    class CountLayer(object):
-        count = 0
-        def handle_request(self, context, next):
-            CountLayer.count += 1
-
-    layer = CountLayer()
-    stack = Stack([layer])
-    stack.handle_request({})
-    stack.handle_request({})
-
-    assert CountLayer.count == 1
-
-def test_stack_execution_nesting():
-    class Nested(object):
-        order = []
-        def handle_request(self, context, next):
-            Nested.order.append(self)
-            next.handle_request(context)
-            Nested.order.append(self)
-
-    layer1 = Nested()
-    layer2 = Nested()
-    layers = [layer1, layer2]
-
-    stack = Stack(layers)
-    stack.handle_request({})
-
-    assert Nested.order == [layer1, layer2, layer2, layer1]
 
 #===========================
 #
