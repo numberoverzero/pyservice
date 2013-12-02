@@ -79,30 +79,37 @@ def handler(func):
 class Stack(object):
     def __init__(self, handlers=None):
         self.handlers = handlers or []
+        self.reset()
 
-    def __call__(self, context, next=None):
+    def __call__(self, context, next):
         '''
-        Supports chaining,
+        Supports stacking,
         so that a stack of handlers can be
         re-used.
 
+        NOTE: the stack's handlers are treated as
+        one handler - the next handler is run AFTER, not
+        INSIDE OF, the stack.
+
         ex:
 
-        auth = auth_wrapper()
-        caching = caching_wrapper()
-        logging = logging_wrapper()
+        auth = auth_handler()
+        caching = caching_handler()
+        logging = logging_handler()
         defaultStack = Stack([auth, caching, logging])
 
-        custom1 = CustomLayer()
-        custom2 = CustomLayer()
+        custom1 = CustomHandler()
+        custom2 = CustomHandler()
         customStack = Stack([custom1, custom2])
 
         appStack = Stack([defaultStack, customStack])
         '''
-        self.__index = -1
+        self.reset()
         self.execute(context)
-        if next:
-            next(context)
+        next(context)
+
+    def reset(self):
+        self.__index = -1
 
     def execute(self, context):
         self.__index += 1
