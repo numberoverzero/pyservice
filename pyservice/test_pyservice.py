@@ -583,57 +583,53 @@ def test_to_dict_multiple_fields_extra():
 #===========================
 
 def test_handler_empty_handler():
-    next_called = [False]
     def next_handler(context):
-        next_called[0] = True
+        context["next_called"] = True
 
     @handler
     def empty_handler(context):
         pass
-    context = {}
+    context = {"next_called": False}
     empty_handler(context, next_handler)
-    assert not next_called[0]
+    assert not context["next_called"]
 
 def test_handler_noop_handler():
-    next_called = [False]
     def next_handler(context):
-        next_called[0] = True
+        context["next_called"] = True
 
     @handler
     def empty_handler(context):
         yield
-    context = {}
+    context = {"next_called": False}
     empty_handler(context, next_handler)
-    assert next_called[0]
+    assert context["next_called"]
 
 def test_handler_yield_ordering():
-    order = []
     def next_handler(context):
-        order.append("Chain")
+        context["order"].append("Chain")
 
     @handler
     def ordering_handler(context):
-        order.append("Before")
+        context["order"].append("Before")
         yield
-        order.append("After")
+        context["order"].append("After")
 
-    context = {}
+    context = {"order": []}
     ordering_handler(context, next_handler)
-    assert order == ["Before", "Chain", "After"]
+    assert ["Before", "Chain", "After"] == context["order"]
 
 def test_handler_no_after():
-    order = []
     def next_handler(context):
-        order.append("Chain")
+        context["order"].append("Chain")
 
     @handler
     def ordering_handler(context):
-        order.append("Before")
+        context["order"].append("Before")
         yield
 
-    context = {}
+    context = {"order": []}
     ordering_handler(context, next_handler)
-    assert order == ["Before", "Chain"]
+    assert ["Before", "Chain"] == context["order"]
 
 def test_handler_invalid_multiple_yields():
     next_handler = lambda context: None
@@ -648,20 +644,19 @@ def test_handler_invalid_multiple_yields():
         bad_handler(context, next_handler)
 
 def test_handler_next_raises():
-    order = []
     def next_handler(context):
-        order.append("Chain")
+        context["order"].append("Chain")
         raise ValueError()
 
     @handler
     def bad_handler(context):
-        order.append("Before")
+        context["order"].append("Before")
         yield
-    context = {}
+    context = {"order": []}
 
     with pytest.raises(ValueError):
         bad_handler(context, next_handler)
-    assert order == ["Before", "Chain"]
+    assert ["Before", "Chain"] == context["order"]
 
 def test_handler_catches():
     def next_handler(context):
