@@ -3,6 +3,7 @@ import sys
 import requests
 from pyservice import serialize
 from pyservice.exception_factory import ExceptionContainer
+from pyservice.handler import Stack
 
 def requests_wire_handler(uri, data='', timeout=None):  # pragma: no cover
     '''Adapter for requests library'''
@@ -37,6 +38,10 @@ class Client(object):
         self._wire_handler = requests_wire_handler
         self._timeout = self._attr("timeout", 5)
         self.exceptions = ExceptionContainer()
+        self._handlers = []
+
+    def _add_handler(self, handler):
+        self._handlers.append(handler)
 
     def _attr(self, key, default=None):
         '''Load value - presedence is config -> description meta -> default'''
@@ -47,35 +52,25 @@ class Client(object):
         return default
 
     def _call(self, operation, *args):
-        uri = self._uri.format(operation=operation)
-
         # list -> dict
         desc_input = self._description.operations[operation].input
         signature = [field.name for field in desc_input]
-        context = serialize.to_dict(signature, args)
+        dict_input = serialize.to_dict(signature, args)
 
-        # dict -> wire
-        data = self._serializer.serialize(context)
-
-        # wire -> wire
-        try:
-            response = self._wire_handler(uri, data=data, timeout=self._timeout)
-        except Exception:
-            exc_type, exc_value, exc_traceback = sys.exc_info()
-            exc_type = self.exceptions.ServiceException
-            exc_value = exc_type(exc_value)
-            six.reraise(exc_type, exc_value, tb=exc_traceback)
-
-        # wire -> dict
-        context = self._serializer.deserialize(response)
-
-        self._handle_exception(context)
+        context = {
+            "input": dict_input,
+            "output": {},
+            "operation": operation,
+            "client": self
+        }
+        handlers = self._handlers[:] + [self._handler]
+        Stack(handlers).execute(context)
 
         # dict -> list
         try:
             desc_output = self._description.operations[operation].output
             signature = [field.name for field in desc_output]
-            result = serialize.to_list(signature, context)
+            result = serialize.to_list(signature, context["output"])
         except Exception:
             raise self.exceptions.ServiceException("Server returned invalid/incomplete response")
 
@@ -87,8 +82,30 @@ class Client(object):
         else:
             return result
 
-    def _handle_exception(self, context):
-        if "__exception" in context and len(context) == 1:
-            exception = context["__exception"]
+    def _handler(self, context, next_handler):
+        # dict -> wire
+        data = self._serializer.serialize(context["input"])
+
+        # wire -> wire
+        try:
+            uri = self._uri.format(operation=context["operation"])
+            response = self._wire_handler(uri, data=data, timeout=self._timeout)
+        except Exception:
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            exc_type = self.exceptions.ServiceException
+            exc_value = exc_type(exc_value)
+            six.reraise(exc_type, exc_value, tb=exc_traceback)
+
+        # wire -> dict
+        context["output"] = self._serializer.deserialize(response)
+
+        # Handle exceptions in the handler so surrounding handlers can try/catch
+        self._handle_exception(context["output"])
+
+        next_handler(context)
+
+    def _handle_exception(self, output):
+        if "__exception" in output and len(output) == 1:
+            exception = output["__exception"]
             ex_cls = getattr(self.exceptions, exception["cls"])
             raise ex_cls(*exception["args"])

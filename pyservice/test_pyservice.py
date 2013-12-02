@@ -1138,6 +1138,29 @@ def test_client_handle_exception_no_raise():
     }
     client._handle_exception(context)
 
+def test_client_handler_invoked():
+    client = basic_client()
+    value1, value2 = "Hello", "World"
+    values = {"value1": value1, "value2": value2}
+    client._wire_handler = dumb_wire_handler(output=values)
+
+    @handler
+    def capture(context):
+        captured_context["input"] = dict(context["input"])
+        yield
+        captured_context["output"] = dict(context["output"])
+    captured_context = {}
+    client._add_handler(capture)
+
+    result1, result2 = client.multiecho(value1, value2)
+    
+    # Handler doesn't mess with return unpacking
+    assert (result1, result2) == (value1, value2)
+    
+    # Handler captures input/output
+    assert values == captured_context["input"]
+    assert values == captured_context["output"]
+
 #===========================
 #
 # Service
