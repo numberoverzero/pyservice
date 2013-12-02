@@ -1,4 +1,6 @@
-import functools
+import types
+import six
+import sys
 
 def handler(func):
     '''
@@ -25,21 +27,46 @@ def handler(func):
 
     The rest of the handlers in a chain are executed when control is yielded
     '''
-    @functools.wraps(func)
     def wrapper(context, next_handler):
         # Before next handler
         gen = func(context)
-        try:
-            # `yield` is just permission to continue the chain, don't need value
-            gen.next()
-        except (AttributeError, StopIteration):
-            # If generator didn't yield, we're not calling the next in the chain
+
+        # If it's not a generator, don't execute the rest of the chain.
+        # For whatever reason, the handler terminated the request
+        if not isinstance(gen, types.GeneratorType):
             return
 
-        next_handler(context)
+        try:
+            # `yield` is just permission to continue the chain, don't need value
+            six.advance_iterator(gen)
+        except StopIteration:
+            # If generator didn't yield (or isn't a generator)
+            # then we're not calling the next in the chain
+            return
 
         try:
-            gen.next()
+            next_handler(context)
+        except:
+            # Two notes:
+            #
+            # Why catch here if we're going to throw through the generator?
+            #   Because the generator isn't really a generator - it's a
+            #   convenience for writing before/after blocks for request handling.
+            #   Therefore, we want to let any except/finally/else blocks in the
+            #   handler run against whatever was raised in the chain.
+            #
+            # Why catch everything?
+            #   Unlikely though it is, the handler may want to do something
+            #   with BaseException.  It's a little weird that we're injecting
+            #   the exception back into the generator, but we don't want to
+            #   yield away from the handler, hit an exception down the chain,
+            #   and bail from this helper, not letting the handler we're
+            #   wrapping process cleanup from the exception.
+            instance = sys.exc_info()[1]
+            gen.throw(instance)
+
+        try:
+            six.advance_iterator(gen)
         except StopIteration:
             # Expected - nothing to yield
             return

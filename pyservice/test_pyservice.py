@@ -647,6 +647,55 @@ def test_handler_invalid_multiple_yields():
     with pytest.raises(RuntimeError):
         bad_handler(context, next_handler)
 
+def test_handler_next_raises():
+    order = []
+    def next_handler(context):
+        order.append("Chain")
+        raise ValueError()
+
+    @handler
+    def bad_handler(context):
+        order.append("Before")
+        yield
+    context = {}
+
+    with pytest.raises(ValueError):
+        bad_handler(context, next_handler)
+    assert order == ["Before", "Chain"]
+
+def test_handler_catches():
+    def next_handler(context):
+        context["order"].append("Chain")
+        raise BaseException()
+
+    @handler
+    def bad_handler(context):
+        try:
+            context["order"].append("Before")
+            yield
+        finally:
+            context["order"].append("After")
+    context = {"order": []}
+
+    try:
+        bad_handler(context, next_handler)
+    except BaseException:
+        pass
+
+    assert ["Before", "Chain", "After"] == context["order"]
+
+def test_handler_explicit_StopIteration():
+
+    next_handler = lambda context: None
+
+    @handler
+    def noop_handler(context):
+        # Returns a generator that immediately raises StopIteration
+        return (x for x in [])
+    context = {}
+
+    noop_handler(context, next_handler)
+
 #===========================
 #
 # Stack
