@@ -4,7 +4,7 @@ from pyservice import serialize
 
 class Service(object):
     def __init__(self, description, **config):
-        self.description = description
+        self._description = description
         self._func = {}
         self._run_config = {}
         self._init_config = config
@@ -12,7 +12,7 @@ class Service(object):
 
         self._bottle = bottle
         self._app = bottle.Bottle()
-        route = "/{service}/<operation>".format(service=self.description.name)
+        route = "/{service}/<operation>".format(service=self._description.name)
         self._app.post(route)(self._bottle_call)
 
     def _attr(self, key, default):
@@ -21,12 +21,12 @@ class Service(object):
             return self._run_config[key]
         if key in self._init_config:
             return self._init_config[key]
-        if key in self.description.metadata:
-            return self.description.metadata[key]
+        if key in self._description.metadata:
+            return self._description.metadata[key]
         return default
 
     def _bottle_call(self, operation):
-        if operation not in self.description.operations:
+        if operation not in self._description.operations:
             self._bottle.abort(404, "Unknown Operation '{}'".format(operation))
         try:
             body = self._bottle.request.body.read().decode("utf-8")
@@ -44,7 +44,7 @@ class Service(object):
 
         try:
             # dict -> list
-            desc_input = self.description.operations[operation].input
+            desc_input = self._description.operations[operation].input
             signature = [field.name for field in desc_input]
             args = serialize.to_list(signature, context)
 
@@ -52,7 +52,7 @@ class Service(object):
             result = self._func[operation](*args)
 
             # list -> dict
-            desc_output = self.description.operations[operation].output
+            desc_output = self._description.operations[operation].output
             signature = [field.name for field in desc_output]
 
             # Assume that if signature has 1 (or 0, which is really 1) output field,
@@ -71,7 +71,7 @@ class Service(object):
         cls = exception.__class__.__name__
         args = exception.args
 
-        whitelisted = cls in self.description.exceptions
+        whitelisted = cls in self._description.exceptions
         debugging = self._attr("debug", False)
         if not whitelisted and not debugging:
             cls = "ServiceException"
@@ -89,7 +89,7 @@ class Service(object):
             func, name = name, name.__name__
             name = func.__name__
 
-        if name not in self.description.operations:
+        if name not in self._description.operations:
             raise ValueError("Unknown Operation '{}'".format(name))
 
         def wrap(func):
@@ -113,7 +113,7 @@ class Service(object):
             raise ValueError(msg)
 
         # Args must be an exact ordered match
-        desc_input = self.description.operations[operation].input
+        desc_input = self._description.operations[operation].input
         signature = [field.name for field in desc_input]
         if list(varnames) != signature:
             msg = "Func signature '{}' does not match operation description '{}'"
