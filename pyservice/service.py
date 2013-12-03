@@ -1,5 +1,6 @@
 import bottle
 from pyservice import serialize
+from pyservice.handler import Stack
 
 
 class Service(object):
@@ -14,6 +15,7 @@ class Service(object):
         self._app = bottle.Bottle()
         route = "/{service}/<operation>".format(service=self._description.name)
         self._app.post(route)(self._bottle_call)
+        self._handlers = []
 
     def _attr(self, key, default):
         '''Load value - presedence is run config -> init config -> description meta -> default'''
@@ -24,6 +26,9 @@ class Service(object):
         if key in self._description.metadata:
             return self._description.metadata[key]
         return default
+
+    def _add_handler(self, handler):
+        self._handlers.append(handler)
 
     def _bottle_call(self, operation):
         if operation not in self._description.operations:
@@ -39,33 +44,46 @@ class Service(object):
         operation: operation name
         body: request body (string)
         '''
-        # wire -> dict
-        context = self._serializer.deserialize(body)
 
+        # wire -> dict
+        dict_input = self._serializer.deserialize(body)
+
+        context = {
+            "input": dict_input,
+            "output": {},
+            "operation": operation,
+            "service": self
+        }
+        handlers = self._handlers[:] + [self._handle]
+        Stack(handlers).execute(context)
+
+        # dict -> wire
+        return self._serializer.serialize(context["output"])
+
+    def _handle(self, context, next_handler):
         try:
             # dict -> list
-            desc_input = self._description.operations[operation].input
+            desc_input = self._description.operations[context["operation"]].input
             signature = [field.name for field in desc_input]
-            args = serialize.to_list(signature, context)
+            args = serialize.to_list(signature, context["input"])
 
             # list -> list (input -> output)
-            result = self._func[operation](*args)
+            result = self._func[context["operation"]](*args)
 
             # list -> dict
-            desc_output = self._description.operations[operation].output
+            desc_output = self._description.operations[context["operation"]].output
             signature = [field.name for field in desc_output]
 
             # Assume that if signature has 1 (or 0, which is really 1) output field,
             # result is correct, even if result is iterable (such as lists)
             if len(signature) == 1:
                 result = [result]
-            context = serialize.to_dict(signature, result)
+            context["output"] = serialize.to_dict(signature, result)
 
         except Exception as exception:
-            context = self._handle_exception(exception)
+            context["output"] = self._handle_exception(exception)
 
-        # dict -> wire
-        return self._serializer.serialize(context)
+        next_handler(context)
 
     def _handle_exception(self, exception):
         cls = exception.__class__.__name__

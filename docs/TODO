@@ -5,12 +5,11 @@ Project:
     0) Create universal description for testing that can be used in each step,
         instead of re-defining it in every test.  Saves a lot of space in each test
         and makes the behavior being tested much clearer.
-    1) Re-add handler/stack architecture to server
-        A) Add Client handler tests:
-            Adding handler during stack execution
-            Handler ordering
-            Catching exceptions
-            Nested calls - handler during operaiton 'foo' invokes operation 'bar' on client
+    1) Add handler tests for Client AND Server, as well as more end-to-end tests
+        Adding handler during stack execution
+        Handler ordering
+        Catching exceptions
+        Nested calls - handler during operaiton 'foo' invokes operation 'bar' on client
 
     2) Proper logging - check out how this is done with bottle/gevent
                         since the stuff that comes with a stock

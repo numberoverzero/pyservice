@@ -1098,13 +1098,6 @@ def test_client_wire_handler_exception_wrapping():
 
 
 def test_client_handle_exception_raises():
-    '''
-    def _handle_exception(self, context):
-        if "__exception" in context and len(context) == 1:
-            exception = context["__exception"]
-            ex_cls = getattr(self.exceptions, exception["cls"])
-            raise ex_cls(*exception["args"])
-    '''
     client = basic_client()
     context = {
         "__exception" : {
@@ -1491,6 +1484,36 @@ def test_server_call_raises_on_serialize_failure():
     # json.encoder throws TypeError: <type 'NameError'> is not JSON serializable
     with pytest.raises(TypeError):
         service._call(operation, body)
+
+def test_service_handler_invoked():
+    service = basic_service()
+    value1, value2 = "Hello", "World"
+    values = {"value1": value1, "value2": value2}
+
+    @service.operation("multiecho")
+    def func(value1, value2):
+        return value1, value2
+
+    @handler
+    def capture(context):
+        captured_context["input"] = dict(context["input"])
+        yield
+        captured_context["output"] = dict(context["output"])
+    captured_context = {}
+    service._add_handler(capture)
+
+    operation = "multiecho"
+    body = json.dumps(values)
+
+    output = json.loads(service._call(operation, body))
+    result1, result2 = output["value1"], output["value2"]
+    
+    # Handler doesn't mess with return unpacking
+    assert (result1, result2) == (value1, value2)
+    
+    # Handler captures input/output
+    assert values == captured_context["input"]
+    assert values == captured_context["output"]
 
 #===========================
 #
