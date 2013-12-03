@@ -16,7 +16,7 @@ from pyservice.description import (
     ServiceDescription,
     OperationDescription
 )
-from pyservice.handler import handler, Stack
+from pyservice.handler import handler, execute
 from pyservice.serialize import JsonSerializer, to_list, to_dict
 from pyservice.util import cached, cached_property
 from pyservice.client import Client
@@ -697,28 +697,22 @@ def test_handler_explicit_StopIteration():
 #
 #===========================
 
-def test_empty_stack():
-    stack = Stack()
+def test_execute_empty_handlers():
     context = {}
-    stack.execute(context)
+    execute(context, [])
 
-def test_stack_single_handler():
+def test_execute_single_handler():
     def some_handler(context, next_handler):
         context["calls"] += 1
-    stack = Stack([some_handler])
     context = {"calls": 0}
-    stack.execute(context)
+    execute(context, [some_handler])
     assert 1 == context["calls"]
 
-    # Stack needs to be reset before it will execute handlers again
-    stack.execute(context)
-    assert 1 == context["calls"]
+    # Multiple calls
+    execute(context, [some_handler])
+    assert 2 == context["calls"]
 
-    stack.reset()
-    stack.execute(context)
-    assert 2 == context["calls"]    
-
-def test_stack_second_handler_not_invoked():
+def test_execute_second_handler_not_invoked():
     def first_handler(context, next_handler):
         context["order"].append("first")
 
@@ -727,12 +721,12 @@ def test_stack_second_handler_not_invoked():
         next_handler(context)
         context["order"].append("second_after")
 
-    stack = Stack([first_handler, second_handler])
     context = {"order": []}
-    stack.execute(context)
+    handlers = [first_handler, second_handler]
+    execute(context, handlers)
     assert ["first"] == context["order"]
 
-def test_stack_handler_ordering():
+def test_execute_handler_ordering():
     def first_handler(context, next_handler):
         context["order"].append("first_before")
         next_handler(context)
@@ -743,44 +737,11 @@ def test_stack_handler_ordering():
         next_handler(context)
         context["order"].append("second_after")
 
-    stack = Stack([first_handler, second_handler])
+
     context = {"order": []}
-    stack.execute(context)
+    handlers = [first_handler, second_handler]
+    execute(context, handlers)
     expected_order = ["first_before", "second_before", "second_after", "first_after"]
-    assert expected_order == context["order"]
-
-def test_stack_call():
-    def some_handler(context, next_handler):
-        context["calls"] += 1
-    next_handler = lambda context: None
-
-    stack = Stack([some_handler])
-    context = {"calls": 0}
-    stack(context, next_handler)
-    assert 1 == context["calls"]
-
-    # Stack resets on call
-    stack(context, next_handler)
-    assert 2 == context["calls"]
-
-def test_stack_stacking():
-    def first_handler(context, next_handler):
-        context["order"].append("first_before")
-        next_handler(context)
-        context["order"].append("first_after")
-
-    def second_handler(context, next_handler):
-        context["order"].append("second_before")
-        next_handler(context)
-        context["order"].append("second_after")
-
-    first_stack = Stack([first_handler])
-    second_stack = Stack([second_handler])
-    combined_handler = Stack([first_stack, second_stack])
-    
-    context = {"order": []}
-    combined_handler.execute(context)
-    expected_order = ["first_before", "first_after", "second_before", "second_after"]
     assert expected_order == context["order"]
 
 #===========================
@@ -1146,10 +1107,10 @@ def test_client_handler_invoked():
     client._add_handler(capture)
 
     result1, result2 = client.multiecho(value1, value2)
-    
+
     # Handler doesn't mess with return unpacking
     assert (result1, result2) == (value1, value2)
-    
+
     # Handler captures input/output
     assert values == captured_context["input"]
     assert values == captured_context["output"]
@@ -1507,10 +1468,10 @@ def test_service_handler_invoked():
 
     output = json.loads(service._call(operation, body))
     result1, result2 = output["value1"], output["value2"]
-    
+
     # Handler doesn't mess with return unpacking
     assert (result1, result2) == (value1, value2)
-    
+
     # Handler captures input/output
     assert values == captured_context["input"]
     assert values == captured_context["output"]

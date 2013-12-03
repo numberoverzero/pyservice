@@ -1,6 +1,6 @@
 import bottle
 from pyservice import serialize
-from pyservice.handler import Stack
+from pyservice.handler import execute
 
 
 class Service(object):
@@ -55,7 +55,7 @@ class Service(object):
             "service": self
         }
         handlers = self._handlers[:] + [self._handle]
-        Stack(handlers).execute(context)
+        execute(context, handlers)
 
         # dict -> wire
         return self._serializer.serialize(context["output"])

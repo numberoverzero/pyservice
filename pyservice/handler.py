@@ -76,46 +76,17 @@ def handler(func):
     return wrapper
 
 
-class Stack(object):
-    def __init__(self, handlers=None):
-        self.handlers = handlers or []
-        self.reset()
+def execute(context, handlers):
+    # Storing index on the func
+    # Python 2.x doesn't support nonlocal
+    # Using the variable name `self` to indicate we're
+    # doing some self-referential shit here
 
-    def __call__(self, context, next):
-        '''
-        Supports stacking,
-        so that a stack of handlers can be
-        re-used.
-
-        NOTE: the stack's handlers are treated as
-        one handler - the next handler is run AFTER, not
-        INSIDE OF, the stack.
-
-        ex:
-
-        auth = auth_handler()
-        caching = caching_handler()
-        logging = logging_handler()
-        defaultStack = Stack([auth, caching, logging])
-
-        custom1 = CustomHandler()
-        custom2 = CustomHandler()
-        customStack = Stack([custom1, custom2])
-
-        appStack = Stack([defaultStack, customStack])
-        '''
-        self.reset()
-        self.execute(context)
-        next(context)
-
-    def reset(self):
-        self.__index = -1
-
-    def execute(self, context):
-        self.__index += 1
-
-        # End of the chain
-        if self.__index >= len(self.handlers):
+    def next_handler(context):
+        self.index += 1
+        if self.index >= len(handlers):
             return
-
-        self.handlers[self.__index](context, self.execute)
+        handlers[self.index](context, self)
+    self = next_handler
+    self.index = -1
+    next_handler(context)

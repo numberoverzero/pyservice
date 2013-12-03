@@ -3,7 +3,7 @@ import sys
 import requests
 from pyservice import serialize
 from pyservice.exception_factory import ExceptionContainer
-from pyservice.handler import Stack
+from pyservice.handler import execute
 
 def requests_wire_handler(uri, data='', timeout=None):  # pragma: no cover
     '''Adapter for requests library'''
@@ -64,7 +64,7 @@ class Client(object):
             "client": self
         }
         handlers = self._handlers[:] + [self._handler]
-        Stack(handlers).execute(context)
+        execute(context, handlers)
 
         # dict -> list
         try:
