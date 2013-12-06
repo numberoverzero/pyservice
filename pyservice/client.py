@@ -13,6 +13,108 @@ def requests_wire_handler(uri, data='', timeout=None):  # pragma: no cover
 
 
 class Client(object):
+    '''
+    # Local endpoint for a service
+
+    # =================
+    # Operations
+    # =================
+    # Operations are defined in the client's ServiceDescription,
+    # and can be invoked as methods on the client.
+    
+    description = ServiceDescription({
+        "name": "some_service",
+        "operations": [
+            {
+                "name": "echo",
+                "input": ["value1, value2"],
+                "output": ["result1, result2"]
+            }
+        ]
+    })
+    echoer = Client(description)
+    first, second = echoer.echo("Hello", "World")
+    assert first == "Hello"
+    assert second == "World"
+
+    # =================
+    # Exceptions
+    # =================
+    # Client functions throw real exceptions,
+    # which are namespaced under client.exceptions.
+
+    description = ServiceDescription({
+        "name": "tasker",
+        "operations": [
+            {
+                "name": "get_task",
+                "input": ["task_id"],
+                "output": ["name, description"]
+            },
+            {
+                "name": "add_task",
+                "input": ["name", "description"],
+                "outout": ["task_id"]
+            }
+        ],
+        "exceptions": [
+            "KeyError",
+            "InvalidTaskName"
+        ]
+    })
+    todo = client(description)
+    
+    # Built-in exceptions can be caught directly,
+    # and are also available under client.exceptions
+    try:
+        todo.get_task("InvalidKey")
+    except KeyError:
+        print("Unknown task_id")
+    # same behavior:
+    # except todo.ex.KeyError:
+    #    print("Unknown task_id")
+
+    
+    # Custom exceptions from the server are caught
+    # under client.exceptions, or client.ex for short
+    try:
+        todo.add_task("$_ invalid name", "this is a description")
+    except todo.ex.InvalidTaskName:
+        print("InvalidTaskName :(")
+
+    # =================
+    # Metadata
+    # =================
+    # client config is loaded from two places during __init__:
+    # **config, which takes precedence
+    # description.metadata
+    # If neither is provided, the default passed to _attr
+    # is returned
+
+    description = ServiceDescription({
+        "name": "some_service",
+        "operations": ["void"],
+        "metadata_attr": ["a", "list"],
+        "both_attr": True
+    })
+    
+    config = {
+        "both_attr": False,
+        "config_attr": ["some", "values"]
+    }
+    client = Client(description, **config)
+
+    assert ["a", "list"] == client._attr("metadata_attr", "default")
+    assert False == client._attr("both_attr", "default")
+    assert ["some", "values"] == client._attr("config_attr", "default")
+    assert "default" == client._attr("neither_attr", "default")
+    assert None is client._attr("no default")
+
+    # =================
+    # Handlers
+    # =================
+    # See the readme section on client/service handlers.
+    '''
     def __init__(self, description, **config):
         self._description = description
         self._config = config
@@ -38,6 +140,7 @@ class Client(object):
         self._wire_handler = requests_wire_handler
         self._timeout = self._attr("timeout", 5)
         self.exceptions = ExceptionContainer()
+        self.ex = self.exceptions
         self._handlers = []
 
     def _add_handler(self, handler):
