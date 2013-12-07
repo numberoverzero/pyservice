@@ -29,6 +29,13 @@ def default_field(obj, field, cls):
 
 
 class Description(object):
+    '''
+    Generic field which validates a name.
+    Subclasses should include a 'reserved_field'
+    attribute which is added to all parent class'
+    reserved_fields.  This combined list is the set
+    of fields that are not included in metadata.
+    '''
     reserved_fields = ["name"]
 
     def __init__(self, json_obj):
@@ -75,6 +82,9 @@ class Description(object):
 
 
 class OperationDescription(Description):
+    '''
+    Describes an operation's required input and output
+    '''
     reserved_fields = ["input", "output"]
 
     def __init__(self, json_obj):
@@ -102,6 +112,9 @@ class OperationDescription(Description):
 
 
 class ServiceDescription(Description):
+    '''
+    Defines the API for clients and services.
+    '''
     reserved_fields = ["exceptions", "operations"]
 
     def __init__(self, json_obj):
