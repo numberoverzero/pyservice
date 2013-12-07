@@ -54,6 +54,12 @@ BUILTIN_EXCEPTIONS = [
 
 
 class ExceptionFactory(object):
+    '''
+    Class for building and storing Exception types.
+    Built-in exception names are reserved.
+
+
+    '''
     def __init__(self):
         self._exceptions = {}
 
@@ -72,7 +78,7 @@ class ExceptionFactory(object):
         else:
             ex_cls = getattr(six.moves.builtins, name, None)
             # maybe the exception class was deleted? Who knows
-            if not ex_cls:
+            if ex_cls is None:
                 raise NameError("global name '{}' is not defined".format(name))
         return ex_cls
 
@@ -81,6 +87,8 @@ class ExceptionContainer(object):
     '''
     Usage:
         exceptions = ExceptionContainer()
+        assert KeyError is exceptions.KeyError
+
         try:
             ...
         except exceptions.KeyError as e:
