@@ -4,6 +4,110 @@ from pyservice.handler import execute
 
 
 class Service(object):
+    '''
+    # Remote endpoint for a service
+
+    # =================
+    # Operations
+    # =================
+    # Operations are defined in the service's ServiceDescription,
+    # and should be mapped to a function with the same signature
+    # using the Serivice.operation decorator
+    
+    description = ServiceDescription({
+        "name": "some_service",
+        "operations": [
+            {
+                "name": "echo",
+                "input": ["value1, value2"],
+                "output": ["result1", "result2"]
+            }
+        ]
+    })
+    service = Service(description)
+    @service.operation("echo")
+    def echo_func(value1, value2):
+        return value1, value2
+
+    # If no name is provided, the wrapped function's
+    # name is used instead
+    @service.operation
+    def echo(value1, value2):
+        return value1, value2
+
+    # =================
+    # Exceptions
+    # =================
+    # Exceptions thrown are sent back to the client and raised
+    # When not debugging, only whitelisted (included in
+    # service description) exceptions are thrown - 
+    # all other exceptions are returned as a generic
+    # ServiceException.
+
+    description = ServiceDescription({
+        "name": "tasker",
+        "operations": [
+            {
+                "name": "get_task",
+                "input": ["task_id"],
+                "output": ["name", "description"]
+            }
+        ],
+        "exceptions": [
+            KeyError,
+            InvalidId
+        ]
+    })
+    service = Service(description)
+    tasks = {}
+
+    @service.operation
+    def get_task(task_id):
+        if not valid_format(task_id):
+            raise InvalidId(task_id)
+        return tasks[task_id]  # Can raise KeyError
+
+    # =================
+    # Metadata
+    # =================
+    # service config is loaded from three places, and
+    # has the following priority (decreasing):
+    # service.run(**config)
+    # Service(..., **config)
+    # service._description.metadata
+    # Falls back to _attr(..., default)
+
+    description = ServiceDescription({
+        "name": "some_service",
+        "operations": ["void"],
+        "metadata_attr": ["a", "list"],
+        "all_attr": True
+    })
+    
+    init_config = {
+        "all_attr": False,
+        "init_config_attr": ["some", "values"]
+    }
+
+    run_config = {
+        "all_attr": [True, False],
+        "run_config_attr": ["other", "values"]
+    }
+
+    service = Service(description, **config)
+
+    assert [True, False] == service._attr("all_attr", "default")
+    assert ["other", "values"] == service._attr("run_config_attr", "default")
+    assert ["some", "values"] == service._attr("init_config_attr", "default")
+    assert ["a", "list"] == service._attr("metadata_attr", "default")
+    assert "default" == service._attr("none", "default")
+    assert None is service._attr("no default")
+
+    # =================
+    # Handlers
+    # =================
+    # See the readme section on client/service handlers.
+    '''
     def __init__(self, description, **config):
         self._description = description
         self._func = {}
