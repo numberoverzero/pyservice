@@ -1,3 +1,4 @@
+import inspect
 import bottle
 from pyservice import serialize
 from pyservice.handler import execute
@@ -228,18 +229,17 @@ class Service(object):
 
     def _wrap_func(self, operation, func, **kwargs):
         # Function signature cannot include *args or **kwargs
-        varnames = func.__code__.co_varnames
-        argcount = func.__code__.co_argcount
-        if len(varnames) != argcount:
+        spec = inspect.getargspec(func)
+        if spec.varargs or spec.keywords or spec.defaults:
             msg = "Invalid func sig: can only contain positional args (not *args or **kwargs)"
             raise ValueError(msg)
-
+        
         # Args must be an exact ordered match
         desc_input = self._description.operations[operation].input
         signature = [field.name for field in desc_input]
-        if list(varnames) != signature:
+        if list(spec.args) != signature:
             msg = "Func signature '{}' does not match operation description '{}'"
-            raise ValueError(msg.format(varnames, signature))
+            raise ValueError(msg.format(spec.args, signature))
 
         self._func[operation] = func
         return func

@@ -1291,6 +1291,19 @@ def test_service_wrap_func_with_kwargs():
         def vargs_func(arg1, arg2, **kwargs): pass
         service._wrap_func("multiecho", vargs_func)
 
+def test_service_wrap_func_properly_inspect_closure():
+    # Added because the previous method of comparing 
+    #   func.__code__.co_varnames
+    #   func.__code__.co_argcount
+    # is flawed - co_varnames includes
+    # variable names within the function
+    service = basic_service()
+
+    def echo(value):
+        hello = 'World'
+        pass
+    service._wrap_func("echo", echo)
+
 def test_service_wrap_func_bad_sig_missing_args():
     service = basic_service()
 
