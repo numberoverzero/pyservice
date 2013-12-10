@@ -21,7 +21,7 @@ class Client(object):
     # =================
     # Operations are defined in the client's ServiceDescription,
     # and can be invoked as methods on the client.
-    
+
     description = ServiceDescription({
         "name": "some_service",
         "operations": [
@@ -63,7 +63,7 @@ class Client(object):
         ]
     })
     todo = client(description)
-    
+
     # Built-in exceptions can be caught directly,
     # and are also available under client.exceptions
     try:
@@ -74,7 +74,7 @@ class Client(object):
     # except todo.ex.KeyError:
     #    print("Unknown task_id")
 
-    
+
     # Custom exceptions from the server are caught
     # under client.exceptions, or client.ex for short
     try:
@@ -97,7 +97,7 @@ class Client(object):
         "metadata_attr": ["a", "list"],
         "both_attr": True
     })
-    
+
     config = {
         "both_attr": False,
         "config_attr": ["some", "values"]
@@ -139,8 +139,7 @@ class Client(object):
         self._serializer = serialize.JsonSerializer()
         self._wire_handler = requests_wire_handler
         self._timeout = self._attr("timeout", 5)
-        self.exceptions = ExceptionContainer()
-        self.ex = self.exceptions
+        self.ex = self.exceptions = ExceptionContainer()
         self._handlers = []
 
     def _add_handler(self, handler):

@@ -2,7 +2,7 @@ import inspect
 import bottle
 from pyservice import serialize
 from pyservice.handler import execute
-
+from pyservice.exception_factory import ExceptionContainer
 
 class Service(object):
     '''
@@ -14,7 +14,7 @@ class Service(object):
     # Operations are defined in the service's ServiceDescription,
     # and should be mapped to a function with the same signature
     # using the Serivice.operation decorator
-    
+
     description = ServiceDescription({
         "name": "some_service",
         "operations": [
@@ -41,9 +41,14 @@ class Service(object):
     # =================
     # Exceptions thrown are sent back to the client and raised
     # When not debugging, only whitelisted (included in
-    # service description) exceptions are thrown - 
+    # service description) exceptions are thrown -
     # all other exceptions are returned as a generic
     # ServiceException.
+    # Like the Client, exceptions can be referenced
+    # through the service itself.  Both of the following
+    # are valid:
+    #     raise service.exceptions.InvalidId
+    #     raise service.ex.InvalidId
 
     description = ServiceDescription({
         "name": "tasker",
@@ -84,7 +89,7 @@ class Service(object):
         "metadata_attr": ["a", "list"],
         "all_attr": True
     })
-    
+
     init_config = {
         "all_attr": False,
         "init_config_attr": ["some", "values"]
@@ -120,7 +125,9 @@ class Service(object):
         self._app = bottle.Bottle()
         route = "/{service}/<operation>".format(service=self._description.name)
         self._app.post(route)(self._bottle_call)
+        self.ex = self.exceptions = ExceptionContainer()
         self._handlers = []
+
 
     def _attr(self, key, default):
         '''Load value - presedence is run config -> init config -> description meta -> default'''
@@ -233,7 +240,7 @@ class Service(object):
         if spec.varargs or spec.keywords or spec.defaults:
             msg = "Invalid func sig: can only contain positional args (not *args or **kwargs)"
             raise ValueError(msg)
-        
+
         # Args must be an exact ordered match
         desc_input = self._description.operations[operation].input
         signature = [field.name for field in desc_input]
