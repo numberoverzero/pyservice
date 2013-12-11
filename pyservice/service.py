@@ -1,8 +1,11 @@
+import logging
 import inspect
 import bottle
 from pyservice import serialize
 from pyservice.handler import execute
 from pyservice.exception_factory import ExceptionContainer
+logger = logging.getLogger(__name__)
+
 
 class Service(object):
     '''
@@ -129,7 +132,7 @@ class Service(object):
         self._handlers = []
 
 
-    def _attr(self, key, default):
+    def _attr(self, key, default=None):
         '''Load value - presedence is run config -> init config -> description meta -> default'''
         if key in self._run_config:
             return self._run_config[key]
@@ -170,6 +173,7 @@ class Service(object):
             handlers = self._handlers[:] + [self._handle]
             execute(context, handlers)
         except Exception as exception:
+            logger.debug(exception)
             context["output"] = self._handle_exception(exception)
 
         # dict -> wire
