@@ -166,35 +166,33 @@ class Service(object):
             "operation": operation,
             "service": self
         }
-        handlers = self._handlers[:] + [self._handle]
-        execute(context, handlers)
+        try:
+            handlers = self._handlers[:] + [self._handle]
+            execute(context, handlers)
+        except Exception as exception:
+            context["output"] = self._handle_exception(exception)
 
         # dict -> wire
         return self._serializer.serialize(context["output"])
 
     def _handle(self, context, next_handler):
-        try:
-            # dict -> list
-            desc_input = self._description.operations[context["operation"]].input
-            signature = [field.name for field in desc_input]
-            args = serialize.to_list(signature, context["input"])
+        # dict -> list
+        desc_input = self._description.operations[context["operation"]].input
+        signature = [field.name for field in desc_input]
+        args = serialize.to_list(signature, context["input"])
 
-            # list -> list (input -> output)
-            result = self._func[context["operation"]](*args)
+        # list -> list (input -> output)
+        result = self._func[context["operation"]](*args)
 
-            # list -> dict
-            desc_output = self._description.operations[context["operation"]].output
-            signature = [field.name for field in desc_output]
+        # list -> dict
+        desc_output = self._description.operations[context["operation"]].output
+        signature = [field.name for field in desc_output]
 
-            # Assume that if signature has 1 (or 0, which is really 1) output field,
-            # result is correct, even if result is iterable (such as lists)
-            if len(signature) == 1:
-                result = [result]
-            context["output"] = serialize.to_dict(signature, result)
-
-        except Exception as exception:
-            context["output"] = self._handle_exception(exception)
-
+        # Assume that if signature has 1 (or 0, which is really 1) output field,
+        # result is correct, even if result is iterable (such as lists)
+        if len(signature) == 1:
+            result = [result]
+        context["output"] = serialize.to_dict(signature, result)
         next_handler(context)
 
     def _handle_exception(self, exception):

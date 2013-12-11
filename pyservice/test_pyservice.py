@@ -1489,6 +1489,30 @@ def test_service_handler_invoked():
     assert values == captured_context["input"]
     assert values == captured_context["output"]
 
+def test_service_handler_exception_returned():
+    # Exceptions thrown from any part of the request chain,
+    # including (especially) any handler,
+    # should be returned to the client through the normal exception
+    # packing process - not just exceptions during the underlying
+    # function's operation.
+    service = basic_service()
+    value = {"value": "hello"}
+
+    @service.operation("echo")
+    def func(value):
+        return value
+
+    @handler
+    def raiser(context):
+        raise service.ex.WhitelistedException("arg1", True)
+    service._add_handler(raiser)
+
+    operation = "echo"
+    body = json.dumps({"value": value})
+
+    output = service._call(operation, body)
+    assert is_exception(output, "WhitelistedException")
+
 #===========================
 #
 # End-to-end tests
