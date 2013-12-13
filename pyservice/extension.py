@@ -118,26 +118,15 @@ class ExtensionExecutor(object):
         self.extensions = list(extensions)
         self.index = -1
 
-    def before_operation(self, operation):
-        self.index += 1
-        if self.index >= len(self.extensions):
-            return
-        extension = self.extensions[self.index]
-        extension.before_operation(operation, self.before_operation)
-
-    def handle_operation(self, context):
-        self.index += 1
-        if self.index >= len(self.extensions):
-            return
-        extension = self.extensions[self.index]
-        extension.handle_operation(context, self.handle_operation)
-
-    def after_operation(self, operation):
-        self.index += 1
-        if self.index >= len(self.extensions):
-            return
-        extension = self.extensions[self.index]
-        extension.after_operation(operation, self.after_operation)
+    def __getattr__(self, method):
+        '''Creates magic functions that nest extension calls'''
+        def wrapper(*args):
+            self.index += 1
+            if self.index >= len(self.extensions):
+                return
+            func = getattr(self.extensions[self.index], method)
+            func(*(list(args) + [wrapper]))
+        return wrapper
 
 def execute(extensions, method, *args):
     executor = ExtensionExecutor(extensions)
