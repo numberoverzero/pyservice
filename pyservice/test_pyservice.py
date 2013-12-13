@@ -1515,6 +1515,70 @@ def test_service_handler_exception_returned():
 
 #===========================
 #
+# Extension (Client/Server)
+#
+#===========================
+
+def test_Extension_no_register():
+    class Registry(object):
+        extensions = []
+        def _register_extension(self, extension):
+            self.extensions.append(extension)
+
+    registry = Registry()
+    extension = Extension()
+    assert extension not in registry.extensions
+
+def test_Extension_register():
+    class Registry(object):
+        extensions = []
+        def _register_extension(self, extension):
+            self.extensions.append(extension)
+
+    registry = Registry()
+    extension = Extension(registry)
+    assert extension in registry.extensions
+
+def test_Extension_before_operation():
+    client = basic_client()
+    service = basic_service()
+    connect(client, service)
+
+    @service.operation
+    def echo(value):
+        return value
+
+    class BeforeExtension(Extension):
+        def before_operation(self, operation):
+            self.operation = operation
+
+    client_before = BeforeExtension(client)
+    service_before = BeforeExtension(service)
+    assert "foo" == client.echo("foo")
+    assert "echo" == client_before.operation
+    assert "echo" == service_before.operation
+
+def test_Extension_after_operation():
+    client = basic_client()
+    service = basic_service()
+    connect(client, service)
+
+    @service.operation
+    def echo(value):
+        return value
+
+    class AfterExtension(Extension):
+        def after_operation(self, operation):
+            self.operation = operation
+
+    client_after = AfterExtension(client)
+    service_after = AfterExtension(service)
+    assert "foo" == client.echo("foo")
+    assert "echo" == client_after.operation
+    assert "echo" == service_after.operation
+
+#===========================
+#
 # End-to-end tests
 #
 #===========================

@@ -105,9 +105,19 @@ class Extension(object):
     a handler during operation execution, and behavior after an operation returns
     '''
     def __init__(self, obj=None):
+        '''
+        Client/Service is optional.
+        This allows the pattern:
+            class Database(Extension):
+                ...
+
+            service = Service(description)
+            database = Database(service)
+            assert database in service._extensions
+        '''
         self.obj = obj
         if self.obj:
-            self.obj_register_extension(self)
+            self.obj._register_extension(self)
 
     def before_operation(self, operation):
         pass
