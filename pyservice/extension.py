@@ -82,29 +82,13 @@ def extension(func):
                 raise RuntimeError("extension didn't stop")
     return GeneratedExtension
 
-def execute(context, handlers):
-    # Storing index on the func
-    # Python 2.x doesn't support nonlocal
-    # Using the variable name `self` to indicate we're
-    # doing some self-referential shit here
-
-    def next_handler(context):
-        self.index += 1
-        if self.index >= len(handlers):
-            return
-        handle = handlers[self.index]
-        handle(context, self)
-    self = next_handler
-    self.index = -1
-    next_handler(context)
-
 
 class Extension(object):
     '''
     Service or Client extension - can add behavior before an operation starts,
     a handler during operation execution, and behavior after an operation returns
     '''
-    def __init__(self, obj=None):
+    def __init__(self, obj=None, **kwargs):
         '''
         Client/Service is optional.
         This allows the pattern:
@@ -119,11 +103,43 @@ class Extension(object):
         if self.obj:
             self.obj._register_extension(self)
 
-    def before_operation(self, operation):
-        pass
+    def before_operation(self, operation, next_handler):
+        next_handler(operation)
 
     def handle_operation(self, context, next_handler):
         next_handler(context)
 
+    def after_operation(self, operation, next_handler):
+        next_handler(operation)
+
+
+class ExtensionExecutor(object):
+    def __init__(self, extensions):
+        self.extensions = list(extensions)
+        self.index = -1
+
+    def before_operation(self, operation):
+        self.index += 1
+        if self.index >= len(self.extensions):
+            return
+        extension = self.extensions[self.index]
+        extension.before_operation(operation, self.before_operation)
+
+    def handle_operation(self, context):
+        self.index += 1
+        if self.index >= len(self.extensions):
+            return
+        extension = self.extensions[self.index]
+        extension.handle_operation(context, self.handle_operation)
+
     def after_operation(self, operation):
-        pass
+        self.index += 1
+        if self.index >= len(self.extensions):
+            return
+        extension = self.extensions[self.index]
+        extension.after_operation(operation, self.after_operation)
+
+def execute(extensions, method, *args):
+    executor = ExtensionExecutor(extensions)
+    func = getattr(executor, method)
+    func(*args)

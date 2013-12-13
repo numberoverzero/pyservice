@@ -1,8 +1,7 @@
 import logging
 import inspect
 import bottle
-from pyservice import serialize
-from pyservice.extension import execute
+from pyservice import serialize, extension
 from pyservice.exception_factory import ExceptionContainer
 logger = logging.getLogger(__name__)
 
@@ -144,6 +143,7 @@ class Service(object):
 
     def _register_extension(self, extension):
         self._extensions.append(extension)
+        logger.debug("Registered extension '{}'".format(extension))
 
     def _bottle_call(self, operation):
         if operation not in self._description.operations:
@@ -159,9 +159,9 @@ class Service(object):
         operation: operation name
         body: request body (string)
         '''
-        for extension in self._extensions:
-            extension.before_operation(operation)
         try:
+            self.execute("before_operation", operation)
+
             # wire -> dict
             dict_input = self._serializer.deserialize(body)
 
@@ -172,8 +172,7 @@ class Service(object):
                 "service": self
             }
             try:
-                handlers = [getattr(ext, "handle_operation") for ext in self._extensions] + [self._handler]
-                execute(context, handlers)
+                self.execute("handle_operation", context)
             except Exception as exception:
                 logger.debug(exception)
                 context["output"] = self._handle_exception(exception)
@@ -181,10 +180,19 @@ class Service(object):
             # dict -> wire
             return self._serializer.serialize(context["output"])
         finally:
-            for extension in self._extensions:
-                extension.after_operation(operation)
+            self.execute("after_operation", operation)
 
-    def _handler(self, context, next_handler):
+    def execute(self, method, *args):
+        extensions = self._extensions[:] + [self]
+        extension.execute(extensions, method, *args)
+
+    def before_operation(self, operation, next_handler):
+        next_handler(operation)
+
+    def after_operation(self, operation, next_handler):
+        next_handler(operation)
+
+    def handle_operation(self, context, next_handler):
         # dict -> list
         desc_input = self._description.operations[context["operation"]].input
         signature = [field.name for field in desc_input]

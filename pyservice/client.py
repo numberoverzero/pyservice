@@ -1,9 +1,10 @@
 import six
 import sys
+import logging
 import requests
-from pyservice import serialize
+from pyservice import serialize, extension
 from pyservice.exception_factory import ExceptionContainer
-from pyservice.extension import execute
+logger = logging.getLogger(__name__)
 
 def requests_wire_handler(uri, data='', timeout=None):  # pragma: no cover
     '''Adapter for requests library'''
@@ -144,6 +145,7 @@ class Client(object):
 
     def _register_extension(self, extension):
         self._extensions.append(extension)
+        logger.debug("Registered extension '{}'".format(extension))
 
     def _attr(self, key, default=None):
         '''Load value - presedence is config -> description meta -> default'''
@@ -154,9 +156,9 @@ class Client(object):
         return default
 
     def _call(self, operation, *args):
-        for extension in self._extensions:
-            extension.before_operation(operation)
         try:
+            self.execute("before_operation", operation)
+
             # list -> dict
             desc_input = self._description.operations[operation].input
             signature = [field.name for field in desc_input]
@@ -168,8 +170,7 @@ class Client(object):
                 "operation": operation,
                 "client": self
             }
-            handlers = [getattr(ext, "handle_operation") for ext in self._extensions] + [self._handler]
-            execute(context, handlers)
+            self.execute("handle_operation", context)
 
             # dict -> list
             try:
@@ -187,10 +188,19 @@ class Client(object):
             else:
                 return result
         finally:
-            for extension in self._extensions:
-                extension.after_operation(operation)
+            self.execute("after_operation", operation)
 
-    def _handler(self, context, next_handler):
+    def execute(self, method, *args):
+        extensions = self._extensions[:] + [self]
+        extension.execute(extensions, method, *args)
+
+    def before_operation(self, operation, next_handler):
+        next_handler(operation)
+
+    def after_operation(self, operation, next_handler):
+        next_handler(operation)
+
+    def handle_operation(self, context, next_handler):
         # dict -> wire
         data = self._serializer.serialize(context["input"])
 

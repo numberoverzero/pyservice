@@ -693,54 +693,59 @@ def test_extension_decorator_explicit_StopIteration():
 
 #===========================
 #
-# Stack
+# execute / ExtensionExecutor
 #
 #===========================
 
-def test_execute_empty_handlers():
+def test_ExtensionExecutor_empty_handlers():
     context = {}
-    execute(context, [])
+    execute([], "handle_operation", context)
 
-def test_execute_single_handler():
-    def some_handler(context, next_handler):
+def test_ExtensionExecutor_single_handler():
+    @extension
+    def some_extension(context):
         context["calls"] += 1
     context = {"calls": 0}
-    execute(context, [some_handler])
+    execute([some_extension()], "handle_operation", context)
     assert 1 == context["calls"]
 
     # Multiple calls
-    execute(context, [some_handler])
+    execute([some_extension()], "handle_operation", context)
     assert 2 == context["calls"]
 
-def test_execute_second_handler_not_invoked():
-    def first_handler(context, next_handler):
+def test_ExtensionExecutor_second_handler_not_invoked():
+    @extension
+    def first_extension(context):
         context["order"].append("first")
 
-    def second_handler(context, next_handler):
+    @extension
+    def second_extension(context):
         context["order"].append("second_before")
-        next_handler(context)
+        yield
         context["order"].append("second_after")
 
     context = {"order": []}
-    handlers = [first_handler, second_handler]
-    execute(context, handlers)
+    handlers = [first_extension(), second_extension()]
+    execute(handlers, "handle_operation", context)
     assert ["first"] == context["order"]
 
-def test_execute_handler_ordering():
-    def first_handler(context, next_handler):
+def test_ExtensionExecutor_handler_ordering():
+    @extension
+    def first_extension(context):
         context["order"].append("first_before")
-        next_handler(context)
+        yield
         context["order"].append("first_after")
 
-    def second_handler(context, next_handler):
+    @extension
+    def second_extension(context):
         context["order"].append("second_before")
-        next_handler(context)
+        yield
         context["order"].append("second_after")
 
 
     context = {"order": []}
-    handlers = [first_handler, second_handler]
-    execute(context, handlers)
+    handlers = [first_extension(), second_extension()]
+    execute(handlers, "handle_operation", context)
     expected_order = ["first_before", "second_before", "second_after", "first_after"]
     assert expected_order == context["order"]
 
@@ -1549,8 +1554,9 @@ def test_Extension_before_operation():
         return value
 
     class BeforeExtension(Extension):
-        def before_operation(self, operation):
+        def before_operation(self, operation, next_handler):
             self.operation = operation
+            next_handler(operation)
 
     client_before = BeforeExtension(client)
     service_before = BeforeExtension(service)
@@ -1568,8 +1574,9 @@ def test_Extension_after_operation():
         return value
 
     class AfterExtension(Extension):
-        def after_operation(self, operation):
+        def after_operation(self, operation, next_handler):
             self.operation = operation
+            next_handler(operation)
 
     client_after = AfterExtension(client)
     service_after = AfterExtension(service)
