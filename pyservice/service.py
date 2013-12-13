@@ -174,7 +174,6 @@ class Service(object):
             try:
                 self.execute("handle_operation", context)
             except Exception as exception:
-                logger.debug(exception)
                 context["output"] = self._handle_exception(exception)
 
             # dict -> wire
