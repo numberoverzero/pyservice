@@ -82,7 +82,6 @@ def extension(func):
                 raise RuntimeError("extension didn't stop")
     return GeneratedExtension
 
-
 def execute(context, handlers):
     # Storing index on the func
     # Python 2.x doesn't support nonlocal
@@ -107,6 +106,8 @@ class Extension(object):
     '''
     def __init__(self, obj=None):
         self.obj = obj
+        if self.obj:
+            self.obj_register_extension(self)
 
     def before_operation(self, operation):
         pass
