@@ -3,7 +3,7 @@ import sys
 import requests
 from pyservice import serialize
 from pyservice.exception_factory import ExceptionContainer
-from pyservice.handler import execute
+from pyservice.extension import execute
 
 def requests_wire_handler(uri, data='', timeout=None):  # pragma: no cover
     '''Adapter for requests library'''
@@ -111,9 +111,9 @@ class Client(object):
     assert None is client._attr("no default")
 
     # =================
-    # Handlers
+    # Extensions
     # =================
-    # See the readme section on client/service handlers.
+    # See the readme section on client/service extensions.
     '''
     def __init__(self, description, **config):
         self._description = description
@@ -140,10 +140,10 @@ class Client(object):
         self._wire_handler = requests_wire_handler
         self._timeout = self._attr("timeout", 5)
         self.ex = self.exceptions = ExceptionContainer()
-        self._handlers = []
+        self._extensions = []
 
-    def _add_handler(self, handler):
-        self._handlers.append(handler)
+    def _register_extension(self, extension):
+        self._extensions.append(extension)
 
     def _attr(self, key, default=None):
         '''Load value - presedence is config -> description meta -> default'''
@@ -154,35 +154,41 @@ class Client(object):
         return default
 
     def _call(self, operation, *args):
-        # list -> dict
-        desc_input = self._description.operations[operation].input
-        signature = [field.name for field in desc_input]
-        dict_input = serialize.to_dict(signature, args)
-
-        context = {
-            "input": dict_input,
-            "output": {},
-            "operation": operation,
-            "client": self
-        }
-        handlers = self._handlers[:] + [self._handler]
-        execute(context, handlers)
-
-        # dict -> list
+        for extension in self._extensions:
+            extension.before_operation(operation)
         try:
-            desc_output = self._description.operations[operation].output
-            signature = [field.name for field in desc_output]
-            result = serialize.to_list(signature, context["output"])
-        except Exception:
-            raise self.exceptions.ServiceException("Server returned invalid/incomplete response")
+            # list -> dict
+            desc_input = self._description.operations[operation].input
+            signature = [field.name for field in desc_input]
+            dict_input = serialize.to_dict(signature, args)
 
-        # Unpack empty lists and single values
-        if not signature:
-            return None
-        elif len(signature) == 1:
-            return result[0]
-        else:
-            return result
+            context = {
+                "input": dict_input,
+                "output": {},
+                "operation": operation,
+                "client": self
+            }
+            handlers = [getattr(ext, "handle_operation") for ext in self._extensions] + [self._handler]
+            execute(context, handlers)
+
+            # dict -> list
+            try:
+                desc_output = self._description.operations[operation].output
+                signature = [field.name for field in desc_output]
+                result = serialize.to_list(signature, context["output"])
+            except Exception:
+                raise self.exceptions.ServiceException("Server returned invalid/incomplete response")
+
+            # Unpack empty lists and single values
+            if not signature:
+                return None
+            elif len(signature) == 1:
+                return result[0]
+            else:
+                return result
+        finally:
+            for extension in self._extensions:
+                extension.after_operation(operation)
 
     def _handler(self, context, next_handler):
         # dict -> wire

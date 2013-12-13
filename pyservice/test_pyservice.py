@@ -16,7 +16,7 @@ from pyservice.description import (
     ServiceDescription,
     OperationDescription
 )
-from pyservice.handler import handler, execute
+from pyservice.extension import extension, execute, Extension
 from pyservice.serialize import JsonSerializer, to_list, to_dict
 from pyservice.util import cached, cached_property
 from pyservice.client import Client
@@ -578,92 +578,92 @@ def test_to_dict_multiple_fields_extra():
 
 #===========================
 #
-# Handler
+# @extension
 #
 #===========================
 
-def test_handler_empty_handler():
+def test_extension_decorator_empty_handler():
     def next_handler(context):
         context["next_called"] = True
 
-    @handler
+    @extension
     def empty_handler(context):
         pass
     context = {"next_called": False}
-    empty_handler(context, next_handler)
+    empty_handler().handle_operation(context, next_handler)
     assert not context["next_called"]
 
-def test_handler_noop_handler():
+def test_extension_decorator_noop_handler():
     def next_handler(context):
         context["next_called"] = True
 
-    @handler
+    @extension
     def empty_handler(context):
         yield
     context = {"next_called": False}
-    empty_handler(context, next_handler)
+    empty_handler().handle_operation(context, next_handler)
     assert context["next_called"]
 
-def test_handler_yield_ordering():
+def test_extension_decorator_yield_ordering():
     def next_handler(context):
         context["order"].append("Chain")
 
-    @handler
+    @extension
     def ordering_handler(context):
         context["order"].append("Before")
         yield
         context["order"].append("After")
 
     context = {"order": []}
-    ordering_handler(context, next_handler)
+    ordering_handler().handle_operation(context, next_handler)
     assert ["Before", "Chain", "After"] == context["order"]
 
-def test_handler_no_after():
+def test_extension_decorator_no_after():
     def next_handler(context):
         context["order"].append("Chain")
 
-    @handler
+    @extension
     def ordering_handler(context):
         context["order"].append("Before")
         yield
 
     context = {"order": []}
-    ordering_handler(context, next_handler)
+    ordering_handler().handle_operation(context, next_handler)
     assert ["Before", "Chain"] == context["order"]
 
-def test_handler_invalid_multiple_yields():
+def test_extension_decorator_invalid_multiple_yields():
     next_handler = lambda context: None
 
-    @handler
+    @extension
     def bad_handler(context):
         yield
         yield
     context = {}
 
     with pytest.raises(RuntimeError):
-        bad_handler(context, next_handler)
+        bad_handler().handle_operation(context, next_handler)
 
-def test_handler_next_raises():
+def test_extension_decorator_next_raises():
     def next_handler(context):
         context["order"].append("Chain")
         raise ValueError()
 
-    @handler
+    @extension
     def bad_handler(context):
         context["order"].append("Before")
         yield
     context = {"order": []}
 
     with pytest.raises(ValueError):
-        bad_handler(context, next_handler)
+        bad_handler().handle_operation(context, next_handler)
     assert ["Before", "Chain"] == context["order"]
 
-def test_handler_catches():
+def test_extension_decorator_catches():
     def next_handler(context):
         context["order"].append("Chain")
         raise BaseException()
 
-    @handler
+    @extension
     def bad_handler(context):
         try:
             context["order"].append("Before")
@@ -673,23 +673,23 @@ def test_handler_catches():
     context = {"order": []}
 
     try:
-        bad_handler(context, next_handler)
+        bad_handler().handle_operation(context, next_handler)
     except BaseException:
         pass
 
     assert ["Before", "Chain", "After"] == context["order"]
 
-def test_handler_explicit_StopIteration():
+def test_extension_decorator_explicit_StopIteration():
 
     next_handler = lambda context: None
 
-    @handler
+    @extension
     def noop_handler(context):
         # Returns a generator that immediately raises StopIteration
         return (x for x in [])
     context = {}
 
-    noop_handler(context, next_handler)
+    noop_handler().handle_operation(context, next_handler)
 
 #===========================
 #
@@ -1098,13 +1098,13 @@ def test_client_handler_invoked():
     values = {"value1": value1, "value2": value2}
     client._wire_handler = dumb_wire_handler(output=values)
 
-    @handler
+    @extension
     def capture(context):
         captured_context["input"] = dict(context["input"])
         yield
         captured_context["output"] = dict(context["output"])
     captured_context = {}
-    client._add_handler(capture)
+    client._register_extension(capture())
 
     result1, result2 = client.multiecho(value1, value2)
 
@@ -1292,7 +1292,7 @@ def test_service_wrap_func_with_kwargs():
         service._wrap_func("multiecho", vargs_func)
 
 def test_service_wrap_func_properly_inspect_closure():
-    # Added because the previous method of comparing 
+    # Added because the previous method of comparing
     #   func.__code__.co_varnames
     #   func.__code__.co_argcount
     # is flawed - co_varnames includes
@@ -1468,13 +1468,13 @@ def test_service_handler_invoked():
     def func(value1, value2):
         return value1, value2
 
-    @handler
+    @extension
     def capture(context):
         captured_context["input"] = dict(context["input"])
         yield
         captured_context["output"] = dict(context["output"])
     captured_context = {}
-    service._add_handler(capture)
+    service._register_extension(capture())
 
     operation = "multiecho"
     body = json.dumps(values)
@@ -1502,10 +1502,10 @@ def test_service_handler_exception_returned():
     def func(value):
         return value
 
-    @handler
+    @extension
     def raiser(context):
         raise service.ex.WhitelistedException("arg1", True)
-    service._add_handler(raiser)
+    service._register_extension(raiser())
 
     operation = "echo"
     body = json.dumps({"value": value})

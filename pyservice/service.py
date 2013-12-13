@@ -2,7 +2,7 @@ import logging
 import inspect
 import bottle
 from pyservice import serialize
-from pyservice.handler import execute
+from pyservice.extension import execute
 from pyservice.exception_factory import ExceptionContainer
 logger = logging.getLogger(__name__)
 
@@ -113,9 +113,9 @@ class Service(object):
     assert None is service._attr("no default")
 
     # =================
-    # Handlers
+    # Extensions
     # =================
-    # See the readme section on client/service handlers.
+    # See the readme section on client/service extensions.
     '''
     def __init__(self, description, **config):
         self._description = description
@@ -129,7 +129,7 @@ class Service(object):
         route = "/{service}/<operation>".format(service=self._description.name)
         self._app.post(route)(self._bottle_call)
         self.ex = self.exceptions = ExceptionContainer()
-        self._handlers = []
+        self._extensions = []
 
 
     def _attr(self, key, default=None):
@@ -142,8 +142,8 @@ class Service(object):
             return self._description.metadata[key]
         return default
 
-    def _add_handler(self, handler):
-        self._handlers.append(handler)
+    def _register_extension(self, extension):
+        self._extensions.append(extension)
 
     def _bottle_call(self, operation):
         if operation not in self._description.operations:
@@ -159,27 +159,32 @@ class Service(object):
         operation: operation name
         body: request body (string)
         '''
-
-        # wire -> dict
-        dict_input = self._serializer.deserialize(body)
-
-        context = {
-            "input": dict_input,
-            "output": {},
-            "operation": operation,
-            "service": self
-        }
+        for extension in self._extensions:
+            extension.before_operation(operation)
         try:
-            handlers = self._handlers[:] + [self._handle]
-            execute(context, handlers)
-        except Exception as exception:
-            logger.debug(exception)
-            context["output"] = self._handle_exception(exception)
+            # wire -> dict
+            dict_input = self._serializer.deserialize(body)
 
-        # dict -> wire
-        return self._serializer.serialize(context["output"])
+            context = {
+                "input": dict_input,
+                "output": {},
+                "operation": operation,
+                "service": self
+            }
+            try:
+                handlers = [getattr(ext, "handle_operation") for ext in self._extensions] + [self._handler]
+                execute(context, handlers)
+            except Exception as exception:
+                logger.debug(exception)
+                context["output"] = self._handle_exception(exception)
 
-    def _handle(self, context, next_handler):
+            # dict -> wire
+            return self._serializer.serialize(context["output"])
+        finally:
+            for extension in self._extensions:
+                extension.after_operation(operation)
+
+    def _handler(self, context, next_handler):
         # dict -> list
         desc_input = self._description.operations[context["operation"]].input
         signature = [field.name for field in desc_input]
