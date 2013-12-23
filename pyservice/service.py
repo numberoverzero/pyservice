@@ -32,12 +32,6 @@ class Service(object):
     def echo_func(value1, value2):
         return value1, value2
 
-    # If no name is provided, the wrapped function's
-    # name is used instead
-    @service.operation
-    def echo(value1, value2):
-        return value1, value2
-
     # =================
     # Exceptions
     # =================
@@ -69,8 +63,8 @@ class Service(object):
     service = Service(description)
     tasks = {}
 
-    @service.operation
-    def get_task(task_id):
+    @service.operation("get_task")
+    def operation(task_id):
         if not valid_format(task_id):
             raise InvalidId(task_id)
         return tasks[task_id]  # Can raise KeyError
@@ -226,44 +220,29 @@ class Service(object):
             "args": args
         }}
 
-    def operation(self, name=None, func=None, **kwargs):
-        # @service.operation
-        # def name(arg):
-        if callable(name):
-            func, name = name, name.__name__
-            name = func.__name__
-
+    def operation(self, name, **kwargs):
         if name not in self._description.operations:
             raise ValueError("Unknown Operation '{}'".format(name))
 
-        def wrap(func):
-            return self._wrap_func(name, func, **kwargs)
+        def wrapper(func):
+            # Function signature cannot include *args or **kwargs
+            spec = inspect.getargspec(func)
+            if spec.varargs or spec.keywords or spec.defaults:
+                msg = "Invalid func sig: can only contain positional args (not *args or **kwargs)"
+                raise ValueError(msg)
 
-        # service.operation("name", operation)
-        if callable(func):
-            return wrap(func)
+            # Args must be an exact ordered match
+            desc_input = self._description.operations[name].input
+            signature = [field.name for field in desc_input]
+            if list(spec.args) != signature:
+                msg = "Func signature '{}' does not match operation description '{}'"
+                raise ValueError(msg.format(spec.args, signature))
 
-        # @service.operation("name")
-        else:
-            # we need to return a decorator, since we don't have the function to decorate yet
-            return wrap
+            self._func[name] = func
 
-    def _wrap_func(self, operation, func, **kwargs):
-        # Function signature cannot include *args or **kwargs
-        spec = inspect.getargspec(func)
-        if spec.varargs or spec.keywords or spec.defaults:
-            msg = "Invalid func sig: can only contain positional args (not *args or **kwargs)"
-            raise ValueError(msg)
-
-        # Args must be an exact ordered match
-        desc_input = self._description.operations[operation].input
-        signature = [field.name for field in desc_input]
-        if list(spec.args) != signature:
-            msg = "Func signature '{}' does not match operation description '{}'"
-            raise ValueError(msg.format(spec.args, signature))
-
-        self._func[operation] = func
-        return func
+            # Return the input function for testing, local calls, etc.
+            return func
+        return wrapper
 
     def run(self, *args, **config):
         self._run_config = config

@@ -1256,15 +1256,6 @@ def test_service_operation_decorator_unknown_operation():
     with pytest.raises(ValueError):
         service.operation("UnknownOperation")
 
-def test_service_operation_decorator_infer_operation_name():
-    service = basic_service()
-    service._wrap_func = dumb_func_wrapper()
-
-    def void():
-        pass
-
-    assert void is service.operation(void)
-
 def test_service_operation_decorator_returns_decorator():
     service = basic_service()
     service._wrap_func = dumb_func_wrapper()
@@ -1278,23 +1269,23 @@ def test_service_wrap_func_with_vargs():
     service = basic_service()
 
     with pytest.raises(ValueError):
+        @service.operation("echo")
         def vargs_func(arg1, *args): pass
-        service._wrap_func("echo", vargs_func)
 
     with pytest.raises(ValueError):
+        @service.operation("multiecho")
         def vargs_func(arg1, arg2, *args): pass
-        service._wrap_func("multiecho", vargs_func)
 
 def test_service_wrap_func_with_kwargs():
     service = basic_service()
 
     with pytest.raises(ValueError):
+        @service.operation("echo")
         def vargs_func(arg1, **kwargs): pass
-        service._wrap_func("echo", vargs_func)
 
     with pytest.raises(ValueError):
+        @service.operation("multiecho")
         def vargs_func(arg1, arg2, **kwargs): pass
-        service._wrap_func("multiecho", vargs_func)
 
 def test_service_wrap_func_properly_inspect_closure():
     # Added because the previous method of comparing
@@ -1304,44 +1295,46 @@ def test_service_wrap_func_properly_inspect_closure():
     # variable names within the function
     service = basic_service()
 
+    @service.operation("echo")
     def echo(value):
         hello = 'World'
         pass
-    service._wrap_func("echo", echo)
 
 def test_service_wrap_func_bad_sig_missing_args():
     service = basic_service()
 
     def func(): pass
     with pytest.raises(ValueError):
-        service._wrap_func("echo", func)
+        @service.operation("echo")
+        def func(): pass
 
 def test_service_wrap_func_bad_sig_extra_args():
     service = basic_service()
 
     def func(extra_arg1): pass
     with pytest.raises(ValueError):
-        service._wrap_func("void", func)
+        @service.operation("void")
+        def func(extra_arg1): pass
 
 def test_service_wrap_func_bad_wrong_args():
     service = basic_service()
 
-    def func(arg_names, are_wrong): pass
     with pytest.raises(ValueError):
-        service._wrap_func("multiecho", func)
+        @service.operation("multiecho")
+        def func(arg_names, are_wrong): pass
 
 def test_service_wrap_func_bad_sig_args_wrong_order():
     service = basic_service()
 
-    def func(value2, value1): pass
     with pytest.raises(ValueError):
-        service._wrap_func("multiecho", func)
+        @service.operation("multiecho")
+        def func(value2, value1): pass
 
 def test_service_wrap_func_returns_original():
     service = basic_service()
 
     def func(value): pass
-    assert func is service._wrap_func("echo", func)
+    assert func is service.operation("echo")(func)
 
 def test_service_call_missing_args():
     service = basic_service()
@@ -1549,8 +1542,8 @@ def test_Extension_before_operation():
     service = basic_service()
     connect(client, service)
 
-    @service.operation
-    def echo(value):
+    @service.operation("echo")
+    def operation(value):
         return value
 
     class BeforeExtension(Extension):
@@ -1569,8 +1562,8 @@ def test_Extension_after_operation():
     service = basic_service()
     connect(client, service)
 
-    @service.operation
-    def echo(value):
+    @service.operation("echo")
+    def operation(value):
         return value
 
     class AfterExtension(Extension):
@@ -1596,8 +1589,8 @@ def test_e2e_no_return():
     connect(client, service)
 
     called = [False]
-    @service.operation
-    def signal(exec_id):
+    @service.operation("signal")
+    def operation(exec_id):
         called[0] = True
 
     assert None == client.signal("foo")
@@ -1609,8 +1602,8 @@ def test_e2e_single_return():
     connect(client, service)
 
     called = [False]
-    @service.operation
-    def echo(value):
+    @service.operation("echo")
+    def operation(value):
         called[0] = True
         return value
 
@@ -1625,8 +1618,8 @@ def test_e2e_multiple_return():
     connect(client, service)
 
     called = [False]
-    @service.operation
-    def multiecho(value1, value2):
+    @service.operation("multiecho")
+    def operation(value1, value2):
         called[0] = True
         return value1, value2
 
