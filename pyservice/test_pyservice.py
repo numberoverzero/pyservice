@@ -1151,26 +1151,19 @@ def test_service_config_fallbacks():
     data = {"name": "service"}
     description = ServiceDescription(data)
     service = Service(description)
-    assert "default" == service._attr("metakey", "default")
+    assert "default" == service.config.get("metakey", "default")
 
     # Fall through to description
     data = {"name": "service", "metakey": "description"}
     description = ServiceDescription(data)
     service = Service(description)
-    assert "description" == service._attr("metakey", "default")
+    assert "description" == service.config.get("metakey", "default")
 
     # Fall through to init config
     data = {"name": "service", "metakey": "description"}
     description = ServiceDescription(data)
     service = Service(description, metakey="init_config")
-    assert "init_config" == service._attr("metakey", "default")
-
-    # Fall through to run config
-    data = {"name": "service", "metakey": "description"}
-    description = ServiceDescription(data)
-    service = Service(description, metakey="init_config")
-    service._run_config["metakey"] = "run_config"
-    assert "run_config" == service._attr("metakey", "default")
+    assert "init_config" == service.config.get("metakey", "default")
 
 def test_service_config_falsey_values():
     data = {"name": "service", "metakey": True}
@@ -1178,7 +1171,7 @@ def test_service_config_falsey_values():
     service = Service(description, metakey=False)
 
     # Should get false, since init config overrides description metadata
-    assert False is service._attr("metakey", None)
+    assert False is service.config.get("metakey", None)
 
 def test_service_run_preserves_kwargs():
     data = {"name": "service"}
@@ -1197,7 +1190,7 @@ def test_service_run_preserves_kwargs():
     service._app.run = run
 
     service.run(*run_args, **run_kwargs)
-    assert "field" == service._attr("some", None)
+    assert "field" == service.config.get("some", None)
 
 def test_service_bottle_call_unknown_operation():
     service = basic_service()

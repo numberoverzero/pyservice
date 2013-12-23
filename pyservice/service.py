@@ -77,7 +77,6 @@ class Service(object):
     # service.run(**config)
     # Service(..., **config)
     # service._description.metadata
-    # Falls back to _attr(..., default)
 
     description = ServiceDescription({
         "name": "some_service",
@@ -98,12 +97,12 @@ class Service(object):
 
     service = Service(description, **config)
 
-    assert [True, False] == service._attr("all_attr", "default")
-    assert ["other", "values"] == service._attr("run_config_attr", "default")
-    assert ["some", "values"] == service._attr("init_config_attr", "default")
-    assert ["a", "list"] == service._attr("metadata_attr", "default")
-    assert "default" == service._attr("none", "default")
-    assert None is service._attr("no default")
+    assert [True, False] == service.config.get("all_attr", "default")
+    assert ["other", "values"] == service.config.get("run_config_attr", "default")
+    assert ["some", "values"] == service.config.get("init_config_attr", "default")
+    assert ["a", "list"] == service.config.get("metadata_attr", "default")
+    assert "default" == service.config.get("none", "default")
+    assert None is service.config.get("no default")
 
     # =================
     # Extensions
@@ -111,10 +110,12 @@ class Service(object):
     # See the readme section on client/service extensions.
     '''
     def __init__(self, description, **config):
+        self.config = {}
+        self.config.update(description.metadata)
+        self.config.update(config)
+
         self._description = description
         self._func = {}
-        self._run_config = {}
-        self._init_config = config
         self._serializer = serialize.JsonSerializer()
 
         self._bottle = bottle
@@ -123,17 +124,6 @@ class Service(object):
         self._app.post(route)(self._bottle_call)
         self.ex = self.exceptions = ExceptionContainer()
         self._extensions = []
-
-
-    def _attr(self, key, default=None):
-        '''Load value - presedence is run config -> init config -> description meta -> default'''
-        if key in self._run_config:
-            return self._run_config[key]
-        if key in self._init_config:
-            return self._init_config[key]
-        if key in self._description.metadata:
-            return self._description.metadata[key]
-        return default
 
     def add_extension(self, extension):
         self._extensions.append(extension)
@@ -204,7 +194,7 @@ class Service(object):
         args = exception.args
 
         whitelisted = cls in self._description.exceptions
-        debugging = self._attr("debug", False)
+        debugging = self.config.get("debug", False)
         if not whitelisted and not debugging:
             cls = "ServiceException"
             args = ["Internal Error"]
@@ -240,7 +230,7 @@ class Service(object):
 
     def run(self, *args, **config):
         self.validate()
-        self._run_config = config
+        self.config.update(config)
         self._app.run(*args, **config)
 
     def validate(self):

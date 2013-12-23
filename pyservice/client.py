@@ -98,11 +98,11 @@ class Client(object):
     }
     client = Client(description, **config)
 
-    assert ["a", "list"] == client._attr("metadata_attr", "default")
-    assert False == client._attr("both_attr", "default")
-    assert ["some", "values"] == client._attr("config_attr", "default")
-    assert "default" == client._attr("neither_attr", "default")
-    assert None is client._attr("no default")
+    assert ["a", "list"] == client.config.get("metadata_attr", "default")
+    assert False == client.config.get("both_attr", "default")
+    assert ["some", "values"] == client.config.get("config_attr", "default")
+    assert "default" == client.config.get("neither_attr", "default")
+    assert None is client.config.get("no default")
 
     # =================
     # Extensions
