@@ -105,12 +105,12 @@ def to_dict(signature, data):
     return dict(six.moves.zip(signature, data))
 
 def default_wire_handler(): # pragma: no cover
-    import requests
-
-    def wire_handler(uri, data='', timeout=None):
-        '''Adapter for requests library'''
-        response = requests.post(uri, data=data, timeout=timeout)
-        response.raise_for_status()
-        return response.text
-
-    return wire_handler
+    if not hasattr(default_wire_handler, 'handler'):
+        import requests
+        def wire_handler(uri, data='', timeout=None):
+            '''Adapter for requests library'''
+            response = requests.post(uri, data=data, timeout=timeout)
+            response.raise_for_status()
+            return response.text
+        default_wire_handler.handler = wire_handler
+    return default_wire_handler.handler

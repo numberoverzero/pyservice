@@ -110,8 +110,11 @@ class Client(object):
     # See the readme section on client/service extensions.
     '''
     def __init__(self, description, **config):
+        self.config = {}
+        self.config.update(description.metadata)
+        self.config.update(config)
+
         self._description = description
-        self._config = config
 
         for operation in self._description.operations:
             def make_call_op(operation):
@@ -124,15 +127,14 @@ class Client(object):
             setattr(self, operation, func)
 
         uri = {
-            "schema": self._attr("schema", "http"),
-            "host": self._attr("host", "localhost"),
-            "port": self._attr("port", 8080),
+            "schema": self.config.get("schema", "http"),
+            "host": self.config.get("host", "localhost"),
+            "port": self.config.get("port", 8080),
             "service": self._description.name
         }
         self._uri = "{schema}://{host}:{port}/{service}/{{operation}}".format(**uri)
         self._serializer = serialize.JsonSerializer()
-        self._wire_handler = self._attr("wire_handler", None)
-        self._timeout = self._attr("timeout", 5)
+        self._timeout = self.config.get("timeout", 5)
         self.ex = self.exceptions = ExceptionContainer()
         self._extensions = []
 
@@ -140,18 +142,7 @@ class Client(object):
         self._extensions.append(extension)
         logger.debug("Registered extension '{}'".format(extension))
 
-    def _attr(self, key, default=None):
-        '''Load value - presedence is config -> description meta -> default'''
-        if key in self._config:
-            return self._config[key]
-        if key in self._description.metadata:
-            return self._description.metadata[key]
-        return default
-
     def _call(self, operation, *args):
-        if self._wire_handler is None:
-            self._wire_handler = serialize.default_wire_handler()
-
         try:
             self.execute("before_operation", operation)
 
@@ -196,8 +187,12 @@ class Client(object):
 
         # wire -> wire
         try:
+            wire_handler = self.config.get("wire_handler", None)
+            if wire_handler is None:
+                wire_handler = self.config["wire_handler"] = serialize.default_wire_handler()
+
             uri = self._uri.format(operation=context["operation"])
-            response = self._wire_handler(uri, data=data, timeout=self._timeout)
+            response = wire_handler(uri, data=data, timeout=self._timeout)
         except Exception:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             exc_type = self.exceptions.ServiceException

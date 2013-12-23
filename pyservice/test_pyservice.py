@@ -17,7 +17,7 @@ from pyservice.description import (
     OperationDescription
 )
 from pyservice.extension import extension, execute, Extension
-from pyservice.serialize import JsonSerializer, to_list, to_dict
+from pyservice.serialize import JsonSerializer, to_list, to_dict, default_wire_handler
 from pyservice.util import cached, cached_property
 from pyservice.client import Client
 from pyservice.service import Service
@@ -890,6 +890,17 @@ def test_client_empty_description():
     with pytest.raises(AttributeError):
         Client(None)
 
+def test_client_default_wire_handler():
+    client = basic_client()
+
+    # First service call binds a default handler
+    with pytest.raises(client.ex.ServiceException):
+        client.echo("Hello")
+
+    expected_handler = default_wire_handler()
+    actual_handler = client.config["wire_handler"]
+    assert expected_handler is actual_handler
+
 def test_client_minimum_valid_description():
     data = {"name": "client"}
     description = ServiceDescription(data)
@@ -920,19 +931,19 @@ def test_client_config_fallbacks():
     data = {"name": "client"}
     description = ServiceDescription(data)
     client = Client(description)
-    assert "default" == client._attr("metakey", "default")
+    assert "default" == client.config.get("metakey", "default")
 
     # Fall through to description
     data = {"name": "client", "metakey": "description"}
     description = ServiceDescription(data)
     client = Client(description)
-    assert "description" == client._attr("metakey", "default")
+    assert "description" == client.config.get("metakey", "default")
 
     # Fall through to config
     data = {"name": "client", "metakey": "description"}
     description = ServiceDescription(data)
     client = Client(description, metakey="config")
-    assert "config" == client._attr("metakey", "default")
+    assert "config" == client.config.get("metakey", "default")
 
 def test_client_config_falsey_values():
     data = {"name": "client", "metakey": True}
@@ -940,7 +951,7 @@ def test_client_config_falsey_values():
     client = Client(description, metakey=False)
 
     # Should get false, since init config overrides description metadata
-    assert False is client._attr("metakey", None)
+    assert False is client.config.get("metakey", None)
 
 def test_client_default_uri_and_timeout():
     client = basic_client()
@@ -973,7 +984,7 @@ def test_client_call_raises_on_deserializer_failure():
     client = basic_client()
     def malformed_handler(*a, **kw):
         return '{"name": [,}'
-    client._wire_handler = malformed_handler
+    client.config["wire_handler"] = malformed_handler
 
     with pytest.raises(ValueError):
         client._call("void")
@@ -983,7 +994,7 @@ def test_client_call_raises_exception_from_wire():
     class RealException(Exception):
         pass
     exception_args = ["message", 1, 2, 3]
-    client._wire_handler = dumb_wire_handler(exception=RealException(*exception_args))
+    client.config["wire_handler"] = dumb_wire_handler(exception=RealException(*exception_args))
     with pytest.raises(client.exceptions.RealException):
         client._call("void")
 
@@ -991,7 +1002,7 @@ def test_client_call_wire_missing_result():
     client = basic_client()
 
     output = {"value1": "some value"}
-    client._wire_handler = dumb_wire_handler(output=output)
+    client.config["wire_handler"] = dumb_wire_handler(output=output)
 
     with pytest.raises(client.exceptions.ServiceException):
         client._call("multiecho", "some value", "missing")
@@ -1000,7 +1011,7 @@ def test_client_call_wire_wrong_results():
     client = basic_client()
 
     output = {"value1": "some value", "wrong": "field"}
-    client._wire_handler = dumb_wire_handler(output=output)
+    client.config["wire_handler"] = dumb_wire_handler(output=output)
 
     with pytest.raises(client.exceptions.ServiceException):
         client._call("multiecho", "some value", "other")
@@ -1010,7 +1021,7 @@ def test_client_call_returns_none():
 
     # Doesn't matter if we return extra fields
     output = {"unused":"field"}
-    client._wire_handler = dumb_wire_handler(output=output)
+    client.config["wire_handler"] = dumb_wire_handler(output=output)
 
     result = client._call("void")
     assert None is result
@@ -1020,7 +1031,7 @@ def test_client_call_single_return_value():
 
     # Doesn't matter if we return extra fields
     output = {"value": "some value", "unused": "unused"}
-    client._wire_handler = dumb_wire_handler(output=output)
+    client.config["wire_handler"] = dumb_wire_handler(output=output)
 
     result = client._call("echo", "some value")
     assert "some value" == result
@@ -1030,7 +1041,7 @@ def test_client_call_none_is_valid_single_return():
 
     # Doesn't matter if we return extra fields
     output = {"value": None, "unused": "unused"}
-    client._wire_handler = dumb_wire_handler(output=output)
+    client.config["wire_handler"] = dumb_wire_handler(output=output)
 
     result = client._call("echo", None)
     assert None is result
@@ -1039,7 +1050,7 @@ def test_client_call_multiple_return_values():
     client = basic_client()
 
     output = {"value1": "value1", "value2": "value2"}
-    client._wire_handler = dumb_wire_handler(output=output)
+    client.config["wire_handler"] = dumb_wire_handler(output=output)
 
     result1, result2 = client._call("multiecho", "value1", "value2")
     assert "value1" == result1
@@ -1057,7 +1068,7 @@ def test_client_wire_handler_exception_wrapping():
 
     def handler(*a, **kw):
         raise Exception("wire handler raised")
-    client._wire_handler = handler
+    client.config["wire_handler"] = handler
 
     with pytest.raises(client.exceptions.ServiceException):
         client._call("void")
@@ -1101,7 +1112,7 @@ def test_client_handler_invoked():
     client = basic_client()
     value1, value2 = "Hello", "World"
     values = {"value1": value1, "value2": value2}
-    client._wire_handler = dumb_wire_handler(output=values)
+    client.config["wire_handler"] = dumb_wire_handler(output=values)
 
     @extension
     def capture(context):
@@ -1738,7 +1749,7 @@ def dumb_client(data):
     client = Client(description)
     def noop(*a, **kw):
         raise BaseException("Handler called")
-    client._wire_handler = noop
+    client.config["wire_handler"] = noop
     return client
 
 def mock_bottle(string=""):
@@ -1767,4 +1778,4 @@ def connect(client, service):
     def wire_handler(uri, data='', **kwargs):
         operation = URI_RE.match(uri).groups()[0]
         return service._call(operation, data)
-    client._wire_handler = wire_handler
+    client.config["wire_handler"] = wire_handler
