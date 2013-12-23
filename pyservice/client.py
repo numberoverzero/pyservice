@@ -1,16 +1,9 @@
 import six
 import sys
 import logging
-import requests
 from pyservice import serialize, extension
 from pyservice.exception_factory import ExceptionContainer
 logger = logging.getLogger(__name__)
-
-def requests_wire_handler(uri, data='', timeout=None):  # pragma: no cover
-    '''Adapter for requests library'''
-    response = requests.post(uri, data=data, timeout=timeout)
-    response.raise_for_status()
-    return response.text
 
 
 class Client(object):
@@ -138,7 +131,7 @@ class Client(object):
         }
         self._uri = "{schema}://{host}:{port}/{service}/{{operation}}".format(**uri)
         self._serializer = serialize.JsonSerializer()
-        self._wire_handler = requests_wire_handler
+        self._wire_handler = self._attr("wire_handler", None)
         self._timeout = self._attr("timeout", 5)
         self.ex = self.exceptions = ExceptionContainer()
         self._extensions = []
@@ -156,6 +149,9 @@ class Client(object):
         return default
 
     def _call(self, operation, *args):
+        if self._wire_handler is None:
+            self._wire_handler = serialize.default_wire_handler()
+
         try:
             self.execute("before_operation", operation)
 
