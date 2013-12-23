@@ -245,5 +245,14 @@ class Service(object):
         return wrapper
 
     def run(self, *args, **config):
+        self.validate()
         self._run_config = config
         self._app.run(*args, **config)
+
+    def validate(self):
+        expected_operations = set(self._description.operations)
+        actual_operations = set(self._func)
+
+        if expected_operations != actual_operations:
+            raise ValueError("Expected operations {} but found operations {} instead.".format(
+                expected_operations, actual_operations))

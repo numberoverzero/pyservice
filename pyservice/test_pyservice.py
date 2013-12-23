@@ -1511,6 +1511,16 @@ def test_service_handler_exception_returned():
     output = service._call(operation, body)
     assert is_exception(output, "WhitelistedException")
 
+def test_service_validate_missing_func():
+    service = basic_service()
+
+    @service.operation("echo")
+    def operation(value):
+        return value
+
+    with pytest.raises(ValueError):
+        service.validate()
+
 #===========================
 #
 # Extension (Client/Server)
