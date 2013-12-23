@@ -136,7 +136,7 @@ class Client(object):
         self.ex = self.exceptions = ExceptionContainer()
         self._extensions = []
 
-    def _register_extension(self, extension):
+    def add_extension(self, extension):
         self._extensions.append(extension)
         logger.debug("Registered extension '{}'".format(extension))
 
@@ -189,12 +189,6 @@ class Client(object):
     def execute(self, method, *args):
         extensions = self._extensions[:] + [self]
         extension.execute(extensions, method, *args)
-
-    def before_operation(self, operation, next_handler):
-        next_handler(operation)
-
-    def after_operation(self, operation, next_handler):
-        next_handler(operation)
 
     def handle_operation(self, context, next_handler):
         # dict -> wire

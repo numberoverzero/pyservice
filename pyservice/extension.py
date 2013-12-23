@@ -101,7 +101,7 @@ class Extension(object):
         '''
         self.obj = obj
         if self.obj:
-            self.obj._register_extension(self)
+            self.obj.add_extension(self)
 
     def before_operation(self, operation, next_handler):
         next_handler(operation)
@@ -121,12 +121,27 @@ class ExtensionExecutor(object):
     def __getattr__(self, method):
         '''Creates magic functions that nest extension calls'''
         def wrapper(*args):
+            func = self.__next(method)
+            if func:
+                args = list(args) + [wrapper]
+                func(*args)
+        return wrapper
+
+    def __next(self, method):
+        '''
+        Returns the next extension with the required method,
+        or None if no such method exists, or the index is out of bounds
+        '''
+        while True:
             self.index += 1
             if self.index >= len(self.extensions):
-                return
-            func = getattr(self.extensions[self.index], method)
-            func(*(list(args) + [wrapper]))
-        return wrapper
+                return None
+            ext = self.extensions[self.index]
+            func = getattr(ext, method, None)
+            if func is None:
+                continue
+            else:
+                return func
 
 def execute(extensions, method, *args):
     executor = ExtensionExecutor(extensions)

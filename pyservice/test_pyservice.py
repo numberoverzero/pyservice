@@ -1109,7 +1109,7 @@ def test_client_handler_invoked():
         yield
         captured_context["output"] = dict(context["output"])
     captured_context = {}
-    client._register_extension(capture())
+    client.add_extension(capture())
 
     result1, result2 = client.multiecho(value1, value2)
 
@@ -1258,7 +1258,6 @@ def test_service_operation_decorator_unknown_operation():
 
 def test_service_operation_decorator_returns_decorator():
     service = basic_service()
-    service._wrap_func = dumb_func_wrapper()
 
     def void(): pass
     decorator = service.operation("void")
@@ -1472,7 +1471,7 @@ def test_service_handler_invoked():
         yield
         captured_context["output"] = dict(context["output"])
     captured_context = {}
-    service._register_extension(capture())
+    service.add_extension(capture())
 
     operation = "multiecho"
     body = json.dumps(values)
@@ -1503,7 +1502,7 @@ def test_service_handler_exception_returned():
     @extension
     def raiser(context):
         raise service.ex.WhitelistedException("arg1", True)
-    service._register_extension(raiser())
+    service.add_extension(raiser())
 
     operation = "echo"
     body = json.dumps({"value": value})
@@ -1530,7 +1529,7 @@ def test_service_validate_missing_func():
 def test_Extension_no_register():
     class Registry(object):
         extensions = []
-        def _register_extension(self, extension):
+        def add_extension(self, extension):
             self.extensions.append(extension)
 
     registry = Registry()
@@ -1540,7 +1539,7 @@ def test_Extension_no_register():
 def test_Extension_register():
     class Registry(object):
         extensions = []
-        def _register_extension(self, extension):
+        def add_extension(self, extension):
             self.extensions.append(extension)
 
     registry = Registry()
@@ -1750,10 +1749,6 @@ def mock_bottle(string=""):
     mock_bottle.request.body = six.BytesIO(six.b(string))
     return mock_bottle
 
-def dumb_func_wrapper():
-    def wrap(operation, func, **kwargs):
-        return func
-    return wrap
 
 class Container(object): pass
 
