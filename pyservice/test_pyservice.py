@@ -24,7 +24,7 @@ from pyservice.service import Service
 from pyservice.handlers import ClientHandler
 
 # Common description for testing Client, Service
-basic_description = ServiceDescription({
+basic_description_string = """{
     "name": "service",
     "operations": [
         "void",
@@ -47,7 +47,10 @@ basic_description = ServiceDescription({
         "WhitelistedException",
         "AnotherWhitelistedException"
     ]
-})
+}"""
+
+basic_description = ServiceDescription.from_string(basic_description_string)
+
 def basic_client(**config):
     return WebServiceClient(basic_description, **config)
 
@@ -158,18 +161,17 @@ def test_description_init_string():
     assert name == desc.name
 
 def test_description_from_json():
-    data = json.loads(valid_description_string().replace('\n', ''))
+    data = json.loads(basic_description_string.replace('\n', ''))
     desc = Description.from_json(data)
     assert "service" == desc.name
     assert data is not desc._obj
 
 def test_description_from_string():
-    string = valid_description_string()
-    Description.from_string(string)
+    Description.from_string(basic_description_string)
 
 def test_description_from_file():
     with tempfile.NamedTemporaryFile(mode='w+') as file_obj:
-        file_obj.write(valid_description_string())
+        file_obj.write(basic_description_string)
         file_obj.seek(0)
         Description.from_file(file_obj.name)
 
@@ -325,8 +327,7 @@ def test_service_description_valid_exceptions():
     assert set(expected_exceptions) == set(service.exceptions)
 
 def test_full_description_metadata():
-    string = valid_description_string()
-    service = ServiceDescription.from_string(string)
+    service = ServiceDescription.from_string(basic_description_string)
 
     assert not service.metadata
     for name, operation in six.iteritems(service.operations):
@@ -967,9 +968,6 @@ def test_client_call_raises_on_serializer_failure():
 
 def test_client_call_raises_on_deserializer_failure():
     client = basic_client()
-    class MalformedClientHandler(ClientHandler):
-        def handle(self, service, operation, data, **kwargs):
-            return '{"name": [,}'
     client.handler = MalformedClientHandler()
 
     with pytest.raises(ValueError):
@@ -1051,10 +1049,6 @@ def test_client_operation_building():
 
 def test_client_wire_handler_exception_wrapping():
     client = basic_client()
-
-    class RaiseClientHandler(ClientHandler):
-        def handle(self, service, operation, data, **kwargs):
-            raise Exception("wire handler raised")
     client.handler = RaiseClientHandler()
 
     with pytest.raises(client.exceptions.ServiceException):
@@ -1191,7 +1185,6 @@ def test_service_bottle_call_raises_when_call_raises():
     def mock_call(operation, body):
         raise ValueError("service._call raised")
     service._call = mock_call
-    service._bottle = mock_bottle()
 
     with pytest.raises(bottle.HTTPError):
         service._bottle_call("void")
@@ -1677,31 +1670,6 @@ def cached_decorator_class():
             return data
     return Class
 
-def valid_description_string():
-    return """
-    {
-        "name": "service",
-        "operations": [
-            {
-                "name": "operation1",
-                "input": ["arg1", "arg2"],
-                "output": []
-            },
-            {
-                "name": "operation2",
-                "input": ["arg1"],
-                "output": ["value1"]
-            },
-            {
-                "name": "operation3",
-                "input": [],
-                "output": ["value1", "value2"]
-            }
-        ],
-        "exceptions": ["exception1", "exception2"]
-    }
-    """
-
 def dumb_wire_handler(output=None, exception=None):
     '''Construct a dumb wire handler that returns a fixed json'''
     if exception:
@@ -1713,26 +1681,7 @@ def dumb_wire_handler(output=None, exception=None):
         })
     else:
         result = json.dumps(output)
-
-    class DumbWireHandler(ClientHandler):
-        def handle(self, service_name, operation, data, **kwargs):
-            return result
-    return DumbWireHandler()
-
-def dumb_client(data):
-    '''
-    Dumb client with an empty wire handler
-
-    Useful for testing exceptions that should occur
-    before the wire handler is invoked
-    '''
-    description = ServiceDescription(data)
-    client = Client(description)
-    class NOOPClientHandler(ClientHandler):
-        def handle(self, service, operation, data, **kwargs):
-            raise BaseException("Handler called")
-    client.handler = NOOPClientHandler()
-    return client
+    return DumbWireHandler(result)
 
 def mock_bottle(string=""):
     '''Sets (mocked)bottle.request.body = IOBytes of string'''
@@ -1749,6 +1698,17 @@ def is_exception(string, exception_cls):
     data = json.loads(string)
     return exception_cls == data["__exception"]["cls"]
 
+
+class RaiseClientHandler(ClientHandler):
+    def handle(self, service, operation, data, **kwargs):
+        raise Exception("wire handler raised")
+
+
+class MalformedClientHandler(ClientHandler):
+    def handle(self, service, operation, data, **kwargs):
+        return '{"name": [,}'
+
+
 class DirectClientHandler(ClientHandler):
     def __init__(self, service):
         self.service = service
@@ -1756,7 +1716,10 @@ class DirectClientHandler(ClientHandler):
     def handle(self, service, operation, data, **kwargs):
         return self.service._call(operation, data)
 
-def dummy_func():
-    def func(*a, **kw):
-        pass
-    return func
+
+class DumbWireHandler(ClientHandler):
+    def __init__(self, result):
+        self.result = result
+
+    def handle(self, service_name, operation, data, **kwargs):
+        return self.result
