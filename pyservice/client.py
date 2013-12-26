@@ -1,7 +1,7 @@
 import six
 import sys
 import logging
-from pyservice import serialize, extension
+from pyservice import serialize, handlers, extension
 from pyservice.exception_factory import ExceptionContainer
 logger = logging.getLogger(__name__)
 
@@ -109,12 +109,15 @@ class Client(object):
     # =================
     # See the readme section on client/service extensions.
     '''
-    def __init__(self, description, **config):
+    def __init__(self, description, handler, **config):
+        self.handler = handler
+
         self.config = {}
         self.config.update(description.metadata)
         self.config.update(config)
 
         self._description = description
+        service = self._description.name
 
         for operation in self._description.operations:
             def make_call_op(operation):
@@ -125,16 +128,9 @@ class Client(object):
                 return lambda *args: self._call(operation, *args)
             func = make_call_op(operation)
             setattr(self, operation, func)
+            self.handler.register(service, operation, self, **self.config)
 
-        uri = {
-            "schema": self.config.get("schema", "http"),
-            "host": self.config.get("host", "localhost"),
-            "port": self.config.get("port", 8080),
-            "service": self._description.name
-        }
-        self._uri = "{schema}://{host}:{port}/{service}/{{operation}}".format(**uri)
         self._serializer = serialize.JsonSerializer()
-        self._timeout = self.config.get("timeout", 5)
         self.ex = self.exceptions = ExceptionContainer()
         self._extensions = []
 
@@ -151,12 +147,14 @@ class Client(object):
             signature = [field.name for field in desc_input]
             dict_input = serialize.to_dict(signature, args)
 
+            # dict -> wire -> dict
             context = {
                 "input": dict_input,
                 "output": {},
                 "operation": operation,
                 "client": self
             }
+            # Eventually calls self.handle_operation
             self.execute("handle_operation", context)
 
             # dict -> list
@@ -187,12 +185,7 @@ class Client(object):
 
         # wire -> wire
         try:
-            wire_handler = self.config.get("wire_handler", None)
-            if wire_handler is None:
-                wire_handler = self.config["wire_handler"] = serialize.default_wire_handler()
-
-            uri = self._uri.format(operation=context["operation"])
-            response = wire_handler(uri, data=data, timeout=self._timeout)
+            response = self.handler.handle(self._description.name, context["operation"], data)
         except Exception:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             exc_type = self.exceptions.ServiceException
@@ -202,7 +195,7 @@ class Client(object):
         # wire -> dict
         context["output"] = self._serializer.deserialize(response)
 
-        # Handle exceptions in the handler so surrounding handlers can try/catch
+        # Exceptions in the handler so surrounding handlers can try/catch
         self._handle_exception(context["output"])
 
         next_handler(context)
@@ -212,3 +205,10 @@ class Client(object):
             exception = output["__exception"]
             ex_cls = getattr(self.exceptions, exception["cls"])
             raise ex_cls(*exception["args"])
+
+
+class WebServiceClient(Client):
+    '''Uses requests to make calls to a web service'''
+    def __init__(self, description, **config):
+        handler = handlers.RequestsHandler()
+        super(WebServiceClient, self).__init__(description, handler, **config)
