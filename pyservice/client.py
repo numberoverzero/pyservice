@@ -109,7 +109,7 @@ class Client(object):
     # =================
     # See the readme section on client/service extensions.
     '''
-    def __init__(self, description, handler, **config):
+    def __init__(self, description, handler, serializer, **config):
         self.handler = handler
 
         self.config = {}
@@ -130,7 +130,7 @@ class Client(object):
             setattr(self, operation, func)
             self.handler.register(service, operation, self, **self.config)
 
-        self._serializer = serialize.JsonSerializer()
+        self.serializer = serializer
         self.ex = self.exceptions = ExceptionContainer()
         self._extensions = []
 
@@ -181,7 +181,7 @@ class Client(object):
 
     def handle_operation(self, context, next_handler):
         # dict -> wire
-        data = self._serializer.serialize(context["input"])
+        data = self.serializer.serialize(context["input"])
 
         # wire -> wire
         try:
@@ -193,7 +193,7 @@ class Client(object):
             six.reraise(exc_type, exc_value, tb=exc_traceback)
 
         # wire -> dict
-        context["output"] = self._serializer.deserialize(response)
+        context["output"] = self.serializer.deserialize(response)
 
         # Exceptions in the handler so surrounding handlers can try/catch
         self._handle_exception(context["output"])
@@ -208,7 +208,8 @@ class Client(object):
 
 
 class WebServiceClient(Client):
-    '''Uses requests to make calls to a web service'''
+    '''Uses requests to make json calls to a web service'''
     def __init__(self, description, **config):
         handler = handlers.RequestsHandler()
-        super(WebServiceClient, self).__init__(description, handler, **config)
+        serializer = serialize.JsonSerializer()
+        super(WebServiceClient, self).__init__(description, handler, serializer, **config)
