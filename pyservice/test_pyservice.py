@@ -20,7 +20,7 @@ from pyservice.extension import extension, execute, Extension
 from pyservice.serialize import JsonSerializer, to_list, to_dict
 from pyservice.util import cached, cached_property
 from pyservice.client import Client, WebServiceClient
-from pyservice.service import Service
+from pyservice.service import WebService
 from pyservice.handlers import ClientHandler
 
 # Common description for testing Client, Service
@@ -55,7 +55,7 @@ def basic_client(**config):
     return WebServiceClient(basic_description, **config)
 
 def basic_service(**config):
-    return Service(basic_description, **config)
+    return WebService(basic_description, **config)
 
 #===========================
 #
@@ -1120,36 +1120,36 @@ def test_client_handler_invoked():
 
 def test_service_empty_description():
     with pytest.raises(AttributeError):
-        Service(None)
+        WebService(None)
 
 def test_service_minimum_valid_description():
     data = {"name": "service"}
     description = ServiceDescription(data)
-    Service(description)
+    WebService(description)
 
 def test_service_config_fallbacks():
     # Fall all the way through to default
     data = {"name": "service"}
     description = ServiceDescription(data)
-    service = Service(description)
+    service = WebService(description)
     assert "default" == service.config.get("metakey", "default")
 
     # Fall through to description
     data = {"name": "service", "metakey": "description"}
     description = ServiceDescription(data)
-    service = Service(description)
+    service = WebService(description)
     assert "description" == service.config.get("metakey", "default")
 
     # Fall through to init config
     data = {"name": "service", "metakey": "description"}
     description = ServiceDescription(data)
-    service = Service(description, metakey="init_config")
+    service = WebService(description, metakey="init_config")
     assert "init_config" == service.config.get("metakey", "default")
 
 def test_service_config_falsey_values():
     data = {"name": "service", "metakey": True}
     description = ServiceDescription(data)
-    service = Service(description, metakey=False)
+    service = WebService(description, metakey=False)
 
     # Should get false, since init config overrides description metadata
     assert False is service.config.get("metakey", None)
@@ -1157,7 +1157,7 @@ def test_service_config_falsey_values():
 def test_service_run_preserves_kwargs():
     data = {"name": "service"}
     description = ServiceDescription(data)
-    service = Service(description)
+    service = WebService(description)
     service._app = Container()
 
     run_args = [1, False, type]

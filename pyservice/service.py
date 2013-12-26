@@ -109,14 +109,14 @@ class Service(object):
     # =================
     # See the readme section on client/service extensions.
     '''
-    def __init__(self, description, **config):
+    def __init__(self, description, serializer, **config):
         self.config = {}
         self.config.update(description.metadata)
         self.config.update(config)
 
         self._description = description
         self._func = {}
-        self._serializer = serialize.JsonSerializer()
+        self.serializer = serializer
 
         self._bottle = bottle
         self._app = bottle.Bottle()
@@ -147,7 +147,7 @@ class Service(object):
             self.execute("before_operation", operation)
 
             # wire -> dict
-            dict_input = self._serializer.deserialize(body)
+            dict_input = self.serializer.deserialize(body)
 
             context = {
                 "input": dict_input,
@@ -161,7 +161,7 @@ class Service(object):
                 context["output"] = self._handle_exception(exception)
 
             # dict -> wire
-            return self._serializer.serialize(context["output"])
+            return self.serializer.serialize(context["output"])
         finally:
             self.execute("after_operation", operation)
 
@@ -240,3 +240,9 @@ class Service(object):
         if expected_operations != actual_operations:
             raise ValueError("Expected operations {} but found operations {} instead.".format(
                 expected_operations, actual_operations))
+
+
+class WebService(Service):
+    def __init__(self, description, **config):
+        serializer = serialize.JsonSerializer()
+        super(WebService, self).__init__(description, serializer, **config)
