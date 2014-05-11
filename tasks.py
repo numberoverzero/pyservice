@@ -21,12 +21,3 @@ def build():
 @invoke.task('clean')
 def test():
     run('tox')
-
-@invoke.task('clean')
-def cov():
-    run('tox -e py27')
-
-@invoke.task('clean')
-def local_cov():
-    # Doesn't use tox for remote work
-    run('py.test --cov=./pyservice --cov-report term-missing')
