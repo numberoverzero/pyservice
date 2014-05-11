@@ -6,7 +6,6 @@ def run(*args, **kwargs):
 
 @invoke.task
 def clean():
-    run("rm -rf .tox/")
     run("rm -rf dist/")
     run("rm -rf pyservice.egg-info/")
     run("find . -name '*.pyc' -delete")
