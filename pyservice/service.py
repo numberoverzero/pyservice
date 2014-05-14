@@ -1,220 +1,113 @@
-import logging
-import inspect
 import bottle
+import functools
+import logging
 from pyservice.exception_factory import ExceptionContainer
-from pyservice.serialize import serialize
-from pyservice.extension import extension
+from pyservice.serialize import JsonSerializer
+from pyservice.handlers import BottleHandler
+from pyservice.extension import execute
+from pyservice.docstrings import docstring
+from pyservice.util import filtered_copy
+from pyservice.signature import signature
 logger = logging.getLogger(__name__)
 
 
+@docstring
 class Service(object):
-    '''
-    # Remote endpoint for a service
+    def __init__(self, description, handler, **kwargs):
+        self.functions = {}
+        self.exceptions = ExceptionContainer()
+        self.extensions = []
 
-    # =================
-    # Operations
-    # =================
-    # Operations are defined in the service's Description,
-    # and should be mapped to a function with the same input
-    # using the Serivice.operation decorator
+        self.description = description
+        self.handler = handler
+        self.kwargs = kwargs or {}
 
-    description = ServiceDescription({
-        "name": "some_service",
-        "operations": {
-            "echo": {
-                "input": {
-                    "value1": {},
-                    "value2": {}
-                },
-                "output": {
-                    "result1": {},
-                    "result2": {}
-                }
-            }
+        service_name = self.description.name
+        pattern = "/{service}/<operation>".format(service=service_name)
+        self.handler.route(service_name, self, pattern)
+
+    def run(self, *args, **kwargs):
+        self.kwargs.update(kwargs)
+        self.handler.run(*args, **self.kwargs)
+
+    def operation(self, func, name=None):
+        # func isn't a func, it's the operation name
+        if not callable(func):
+            return functools.partial(self.operation, name=func)
+
+        if name not in self.description.operations:
+            raise ValueError("Unknown Operation '{}'".format(name))
+
+        expected_input = self.description.operations[name].input
+        sig = signature(func)
+
+        # TODO Validate signature against description input
+
+        self.functions[name] = {
+            "func": func,
+            "sig": sig
         }
-    })
-    service = Service(description)
+        return func
 
-    @service.operation("echo")
-    def echo_func(value1, value2):
-        return value1, value2
+    def call(self, operation, request):
+        '''Entry point from handler'''
+        extensions = self.extensions[:] + [self]
+        context = {
+            "__exception": {},
+            "request": request,
+            "response": {},
 
-    # =================
-    # Exceptions
-    # =================
-    # Exceptions thrown are sent back to the client and raised
-    # When not debugging, only whitelisted (included in
-    # service description) exceptions are thrown -
-    # all other exceptions are returned as a generic
-    # ServiceException.
-    # Like the Client, exceptions can be referenced
-    # through the service itself.  Both of the following
-    # are valid:
-    #     raise service.exceptions.InvalidId
-    #     raise service.ex.InvalidId
+            # Meta about this operation
+            "extensions": extensions,
+            "operation": operation,
+            "service": self
+        }
+        fire = functools.partial(execute, extensions, operation, context)
 
-    description = ServiceDescription({
-        "name": "tasker",
-        "operations": [
-            {
-                "name": "get_task",
-                "input": ["task_id"],
-                "output": ["name", "description"]
-            }
-        ],
-        "exceptions": [
-            KeyError,
-            InvalidId
-        ]
-    })
-    service = Service(description)
-    tasks = {}
-
-    @service.operation("get_task")
-    def operation(task_id):
-        if not valid_format(task_id):
-            raise InvalidId(task_id)
-        return tasks[task_id]  # Can raise KeyError
-
-    # =================
-    # Extensions
-    # =================
-    # See the readme section on client/service extensions.
-    '''
-    def __init__(self, description, serializer, **config):
-        self.config = {}
-        self.config.update(description)
-        self.config.update(config)
-
-        self._description = description
-        self._func = {}
-        self.serializer = serializer
-
-        self._bottle = bottle
-        self._app = bottle.Bottle()
-        route = "/{service}/<operation>".format(service=self._description.name)
-        self._app.post(route)(self._bottle_call)
-        self.ex = self.exceptions = ExceptionContainer()
-        self._extensions = []
-
-    def add_extension(self, extension):
-        self._extensions.append(extension)
-        logger.debug("Registered extension '{}'".format(extension))
-
-    def _bottle_call(self, operation):
-        if operation not in self._description.operations:
-            self._bottle.abort(404, "Unknown Operation '{}'".format(operation))
         try:
-            body = self._bottle.request.body.read().decode("utf-8")
-            return self._call(operation, body)
-        except Exception:
-            self._bottle.abort(500, "Internal Error")
-
-    def _call(self, operation, body):
-        '''
-        operation: operation name
-        body: request body (string)
-        '''
-        try:
-            self.execute("before_operation", operation)
-
-            # wire -> dict
-            dict_input = self.serializer.deserialize(body)
-
-            context = {
-                "input": dict_input,
-                "output": {},
-                "operation": operation,
-                "service": self
-            }
-            try:
-                self.execute("handle_operation", context)
-            except Exception as exception:
-                context["output"] = self._handle_exception(exception)
-
-            # dict -> wire
-            return self.serializer.serialize(context["output"])
+            fire("before_operation")
+            fire("handle_operation")
+        except Exception as exception:
+            # Catch exception here instead of inside handle_operation
+            # so that extensions can try/catch
+            self.raise_exception(operation, exception, context)
         finally:
-            self.execute("after_operation", operation)
+            # Don't wrap this fire in try/catch, handler will catch as an
+            # internal failure
+            fire("after_operation")
+            # Always give context back to the handler, so it can pass along
+            # request, __exception
+            return context
 
-    def execute(self, method, *args):
-        extensions = self._extensions[:] + [self]
-        extension.execute(extensions, method, *args)
+    def handle_operation(self, operation, context, next_handler):
+        # https://docs.python.org/3/library/inspect.html#inspect.BoundArguments
+        f = self.functions[operation]
+        bound_params = f["sig"].bind(**context["request"])
+        result = f["func"](*bound_params.args, **bound_params.kwargs)
 
-    def handle_operation(self, context, next_handler):
-        # dict -> list
-        desc_input = self._description.operations[context["operation"]].input
-        signature = [field.name for field in desc_input]
-        args = serialize.to_list(signature, context["input"])
+        # TODO: validate result against expected service output
 
-        # list -> list (input -> output)
-        result = self._func[context["operation"]](*args)
+        context["response"].update(result)
+        next_handler(operation, context)
 
-        # list -> dict
-        desc_output = self._description.operations[context["operation"]].output
-        signature = [field.name for field in desc_output]
-
-        # Assume that if signature has 1 (or 0, which is really 1) output field,
-        # result is correct, even if result is iterable (such as lists)
-        if len(signature) == 1:
-            result = [result]
-        context["output"] = serialize.to_dict(signature, result)
-        next_handler(context)
-
-    def _handle_exception(self, exception):
+    def raise_exception(self, operation, exception, context):
         cls = exception.__class__.__name__
         args = exception.args
 
-        whitelisted = cls in self._description.exceptions
+        whitelisted = cls in self.description.operations[operation].exceptions
         debugging = self.config.get("debug", False)
-        if not whitelisted and not debugging:
+        if not (whitelisted or debugging):
             cls = "ServiceException"
             args = ["Internal Error"]
 
-        return { "__exception": {
+        context["__exception"] = {
             "cls": cls,
             "args": args
-        }}
-
-    def operation(self, name, **kwargs):
-        if name not in self._description.operations:
-            raise ValueError("Unknown Operation '{}'".format(name))
-
-        def wrapper(func):
-            # Function signature cannot include *args or **kwargs
-            spec = inspect.getargspec(func)
-            if spec.varargs or spec.keywords or spec.defaults:
-                msg = "Invalid func sig: can only contain positional args (not *args or **kwargs)"
-                raise ValueError(msg)
-
-            # Args must be an exact ordered match
-            desc_input = self._description.operations[name].input
-            signature = [field.name for field in desc_input]
-            if list(spec.args) != signature:
-                msg = "Func signature '{}' does not match operation description '{}'"
-                raise ValueError(msg.format(spec.args, signature))
-
-            self._func[name] = func
-
-            # Return the input function for testing, local calls, etc.
-            return func
-        return wrapper
-
-    def run(self, *args, **config):
-        self.validate()
-        self.config.update(config)
-        self._app.run(*args, **config)
-
-    def validate(self):
-        expected_operations = set(self._description.operations)
-        actual_operations = set(self._func)
-
-        if expected_operations != actual_operations:
-            raise ValueError("Expected operations {} but found operations {} instead.".format(
-                expected_operations, actual_operations))
+        }
 
 
 class WebService(Service):
-    def __init__(self, description, **config):
-        serializer = serialize.JsonSerializer()
-        super(WebService, self).__init__(description, serializer, **config)
+    def __init__(self, description, **kwargs):
+        serializer = JsonSerializer()
+        handler = BottleHandler(serializer)
+        super(WebService, self).__init__(description, handler, **kwargs)
