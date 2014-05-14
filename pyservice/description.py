@@ -108,7 +108,7 @@ class OperationDescription(Description):
         exceptions = default_field(json_obj, "exceptions", dict)
         for name, exception in six.iteritems(exceptions):
             if "name" not in exception:
-                e["name"] = name
+                exception["name"] = name
             e[name] = Description(exception)
         load_field(self, "exceptions", e)
 
