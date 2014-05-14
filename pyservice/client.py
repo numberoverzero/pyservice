@@ -24,6 +24,7 @@ class _InternalClient(object):
     def call(self, operation, **request):
         extensions = self.external_client.extensions[:] + [self]
         context = {
+            "__exception": {},
             "request": request,
             "response": {},
 
@@ -59,11 +60,11 @@ class _InternalClient(object):
         # Raise here so surrounding extensions can
         # try/catch in handle_operation
         if context["__exception"]:
-            self.handle_exception(operation, context)
+            self.raise_exception(operation, context)
 
         next_handler(operation, context)
 
-    def handle_exception(self, operation, context):
+    def raise_exception(self, operation, context):
         '''
         Note that exception classes are generated from the external_client,
         since all consumers will be catching against
