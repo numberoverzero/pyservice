@@ -1,5 +1,9 @@
 from functools import wraps
 
+def filtered_copy(d, whitelist=None):
+    whitelist = whitelist or []
+    return dict((k, v) for (k, v) in d.items() if k in whitelist)
+
 def cached(func):
     cache = func._cache = {}
     @wraps(func)

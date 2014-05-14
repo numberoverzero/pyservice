@@ -1,86 +1,10 @@
 import types
 import six
 import sys
-
-def extension(func):
-    '''
-    Creates an Extension that only overrides the handle_operation
-    function.  use the 'yield' keyword to indicate where the rest
-    of the operation handler chain should be invoked.
-
-    Similar in usage to the @contextmanager decorator
-
-
-    Typical usage:
-
-        @extension
-        def Logger(context):
-            # Before the rest of the handlers execute
-            start_time = time.now()
-
-            #Process the operation
-            yield
-
-            # Log the operation timing
-            end_time = time.now()
-
-            msg = "Operation {} completed in {} seconds."
-            name = context["operation"].name
-            logger.info(msg.format(name, end_time - start_time))
-
-        service = Service(some_description)
-        logger = Logger(service)
-
-    The rest of the handlers in a chain are executed when control is yielded
-    '''
-    class GeneratedExtension(Extension):
-        def handle_operation(self, context, next_handler):
-            # Before next handler
-            gen = func(context)
-
-            # If it's not a generator, don't execute the rest of the chain.
-            # For whatever reason, the handler terminated the operation
-            if not isinstance(gen, types.GeneratorType):
-                return
-
-            try:
-                # `yield` is just permission to continue the chain, don't need value
-                six.advance_iterator(gen)
-            except StopIteration:
-                # If generator didn't yield (or isn't a generator)
-                # then we're not calling the next in the chain
-                return
-
-            try:
-                next_handler(context)
-            except:
-                # Two notes:
-                #
-                # Why catch here if we're going to throw through the generator?
-                #   Because the generator isn't really a generator - it's a
-                #   convenience for writing before/after blocks for operation handling.
-                #   Therefore, we want to let any except/finally/else blocks in the
-                #   extension run against whatever was raised in the chain.
-                #
-                # Why catch everything?
-                #   Unlikely though it is, the extension may want to do something
-                #   with BaseException.  It's a little weird that we're injecting
-                #   the exception back into the generator, but we don't want to
-                #   yield away from the extension, hit an exception down the chain,
-                #   and bail from this helper, not letting the extension we're
-                #   wrapping process cleanup from the exception.
-                instance = sys.exc_info()[1]
-                gen.throw(instance)
-
-            try:
-                six.advance_iterator(gen)
-            except StopIteration:
-                # Expected - nothing to yield
-                return
-            else:
-                # Found another yield, which doesn't make sense
-                raise RuntimeError("extension didn't stop")
-    return GeneratedExtension
+import functools
+import logging
+from pyservice.docstrings import docstring
+logger = logging.getLogger(__name__)
 
 
 class Extension(object):
@@ -88,62 +12,105 @@ class Extension(object):
     Service or Client extension - can add behavior before an operation starts,
     a handler during operation execution, and behavior after an operation returns
     '''
-    def __init__(self, obj=None, **kwargs):
-        '''
-        Client/Service is optional.
-        This allows the pattern:
-            class Database(Extension):
-                ...
-
-            service = Service(description)
-            database = Database(service)
-            assert database in service._extensions
-        '''
+    hooks = [
+        "before_operation",
+        "handle_operation",
+        "after_operation"
+    ]
+    def __init__(self, obj, **kwargs):
         self.obj = obj
-        if self.obj:
-            self.obj.add_extension(self)
+        obj._extentions.append(self)
+        logger.debug(
+            "Registered extension '{}' to object '{}'".format(
+            extension, obj._description.name))
 
-    def before_operation(self, operation, next_handler):
-        next_handler(operation)
+    def before_operation(self, operation, context, next):
+        next(operation, context)
 
-    def handle_operation(self, context, next_handler):
-        next_handler(context)
+    def handle_operation(self, operation, context, next):
+        next(operation, context)
 
-    def after_operation(self, operation, next_handler):
-        next_handler(operation)
+    def after_operation(self, operation, context, next):
+        next(operation, context)
 
+@docstring
+def extension(func, hook="handle_operation"):
+    # func isn't a func, it's a hook name
+    if not callable(func):
+        return functools.partial(hook=func)
 
-class ExtensionExecutor(object):
-    def __init__(self, extensions):
-        self.extensions = list(extensions)
-        self.index = -1
+    if hook not in Extension.hooks:
+        raise ValueError("Unknown hook '{}'".format(hook))
+    attrs = {
+        "__doc__": "Generated Extension '{}' for the '{}' hook".format(
+            func.__name__, hook),
+        hook: _wrap_hook(hook, func)
+    }
+    return type(func.__name__, (Extension,), attrs)
 
-    def __getattr__(self, method):
-        '''Creates magic functions that nest extension calls'''
-        def wrapper(*args):
-            func = self.__next(method)
-            if func:
-                args = list(args) + [wrapper]
-                func(*args)
-        return wrapper
+def _wrap_hook(hook, func):
+    @functools.wraps
+    def wrapper(self, operation, context, next):
+        # Execute anything before the yield
+        gen = func(operation, context)
 
-    def __next(self, method):
-        '''
-        Returns the next extension with the required method,
-        or None if no such method exists, or the index is out of bounds
-        '''
-        while True:
-            self.index += 1
-            if self.index >= len(self.extensions):
-                return None
-            ext = self.extensions[self.index]
-            func = getattr(ext, method, None)
-            if func is None:
-                continue
-            else:
-                return func
+        # If it's not a generator, don't execute the rest of the chain.
+        # For whatever reason, the handler terminated the operation
+        if not isinstance(gen, types.GeneratorType):
+            return
 
-def execute(extensions, method, *args):
-    executor = ExtensionExecutor(extensions)
-    func = getattr(executor, method)
-    func(*args)
+        try:
+            yielded_value = six.advance_iterator(gen)
+            # if there's a return of two values, push those into the next
+            # handler.  Otherwise, use original operation/context
+            if yielded_value and len(yielded_value) == 2:
+                # function yielded operation, context
+                operation, context = yielded_value
+        except StopIteration:
+            # If generator didn't yield (or isn't a generator)
+            # then we're not calling the next in the chain
+            return
+
+        try:
+            next(operation, context)
+        except:
+            # Why catch here if we're going to throw through the generator?
+            #  The wrapped function isn't really a generator - it's a
+            #  convenience for wrapping handle_operation. We want to let any
+            #  except/finally/else blocks in the extension run against
+            #  whatever was raised in the chain.
+            #
+            # Why catch everything?
+            #  The extension may want to do something with BaseException.
+            #  It's a little weird that we're injecting the exception back
+            #  into the generator, but we don't want to yield away from the
+            #  extension, hit an exception down the chain, and bail from
+            #  this helper, not letting the extension we're wrapping process
+            #  cleanup from the exception.
+            instance = sys.exc_info()[1]
+            gen.throw(instance)
+
+        try:
+            six.advance_iterator(gen)
+        except StopIteration:
+            # Expected - nothing to yield
+            return
+        else:
+            # Found another yield, which doesn't make sense
+            raise RuntimeError("extension didn't stop")
+    return wrapper
+
+def execute(extensions, operation, context, hook):
+    n = len(extensions)
+    def next(operation, context):
+        next.i += 1
+        # Ran out of extensions
+        if next.i >= n:
+            return
+        # Get the hook on the next extension
+        bound_hook = getattr(extensions[next.i], hook)
+        # Invoke the extension's hook with a callback to next
+        bound_hook(operation, context, next)
+
+    next.i = -1  # next will increment to 0 for first operation
+    next(operation, context)

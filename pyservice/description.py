@@ -1,54 +1,70 @@
 import re
 import six
 import json
-from pyservice.util import cached_property
 
 # Most names can only be \w*,
 # with the special restriction that the
 # first character must be a letter
 NAME_RE = re.compile("^[a-zA-Z]\w*$")
 
-def validate_name(name):
-    if not NAME_RE.search(name):
-        raise ValueError("Invalid name: '{}'".format(name))
-    return name
 
-def parse_metadata(data, blacklist=None):
-    metadata = {}
-    blacklist = blacklist or []
-    for key, value in six.iteritems(data):
-        validate_name(key)
-        if key not in blacklist:
-            metadata[key] = value
-    return metadata
+def validate_key(key):
+    if not NAME_RE.search(key):
+        raise ValueError("Invalid key: '{}'".format(key))
+    return key
 
 def default_field(obj, field, cls):
+    '''
+    If field isn't found in obj, instantiate a new cls and insert it into obj
+    '''
     if field not in obj:
         obj[field] = cls()
     return obj[field]
 
+def build_reserved_fields(obj):
+    for cls in obj.__class__.__mro__:
+        cls_rf = getattr(cls, '__reserved_fields__', [])
+        obj.reserved_fields.update(cls_rf)
+
+def load_field(obj, key, value):
+    setattr(obj, key, value)
+    obj.fields.add(key)
+
+def load_fields(obj, data, whitelist=None):
+    '''
+    Any field included in whitelist will be inserted, even if that
+    field is prohibited by the blacklist.
+    '''
+    whitelist = whitelist or []
+    for key, value in six.iteritems(data):
+        key = validate_key(key)
+        if key in obj.fields:
+            # Already set, don't do anything
+            continue
+        if key in whitelist or key not in obj.reserved_fields:
+            load_field(obj, key, value)
+
 
 class Description(object):
     '''
-    Generic field which validates a name.
-    Subclasses should include a 'reserved_field'
-    attribute which is added to all parent class'
-    reserved_fields.  This combined list is the set
-    of fields that are not included in metadata.
+    Subclasses should include a `__reserved_field__` attribute which is added
+    to all parent class' reserved_fields.  This combined list is the set of
+    fields that are not loaded from the input object (by default - they can be
+    forced to load from the object).
     '''
-    reserved_fields = ["name"]
+    __reserved_fields__ = ["name", "fields", "reserved_fields"]
 
-    def __init__(self, json_obj):
+    def __init__(self, json_obj, name=None):
+        # Shortcut to build empty object out of a single string, a name
         if isinstance(json_obj, six.string_types):
-            json_obj = {
-                "name": json_obj
-            }
-        self._obj = json_obj
-        validate_name(self.name)
+            json_obj = { "name": json_obj }
+        self.fields = set()
+        self.reserved_fields = set()
+        build_reserved_fields(self)
+        load_fields(self, json_obj, ["name"])
 
     @classmethod
     def from_json(cls, data):
-        # Copy input
         return cls(dict(data))
 
     @classmethod
@@ -62,78 +78,54 @@ class Description(object):
             string = file_obj.read()
             return cls.from_string(string)
 
-    @cached_property
-    def name(self):
-        return self._obj["name"]
-
-    @cached_property
-    def metadata(self):
-        blacklist = self._reserved_fields()
-        return parse_metadata(self._obj, blacklist)
-
-    def _reserved_fields(self):
-        reserved_fields = []
-        # Walk in reverse to preserve order
-        mro = reversed(self.__class__.__mro__)
-        for cls in mro:
-            cls_rf = getattr(cls, 'reserved_fields', [])
-            reserved_fields.extend(cls_rf)
-        return reserved_fields
-
 
 class OperationDescription(Description):
     '''
     Describes an operation's required input and output
     '''
-    reserved_fields = ["input", "output"]
+    __reserved_fields__ = ["input", "output", "exceptions"]
 
     def __init__(self, json_obj):
         super(OperationDescription, self).__init__(json_obj)
 
-        # Input/Output are basic Descriptions because they
-        # have no attributes besides their name
-        # List, not dict, since order matters
+        i = {}
+        inputs = default_field(json_obj, "input", dict)
+        for name, input in six.iteritems(inputs):
+            if "name" not in input:
+                i["name"] = name
+            i[name] = Description(input)
+        load_field(self, "input", i)
 
-        ins = default_field(self._obj, "input", list)
-        in_objs = [Description(in_) for in_ in ins]
-        self._obj["input"] = in_objs
+        o = {}
+        outputs = default_field(json_obj, "output", dict)
+        for name, output in six.iteritems(outputs):
+            if "name" not in output:
+                o["name"] = name
+            o[name] = Description(output)
+        load_field(self, "output", o)
 
-        outs = default_field(self._obj, "output", list)
-        out_objs = [Description(out_) for out_ in outs]
-        self._obj["output"] = out_objs
-
-    @cached_property
-    def input(self):
-        return self._obj["input"]
-
-    @cached_property
-    def output(self):
-        return self._obj["output"]
+        e = {}
+        exceptions = default_field(json_obj, "exceptions", dict)
+        for name, exception in six.iteritems(exceptions):
+            if "name" not in exception:
+                e["name"] = name
+            e[name] = Description(exception)
+        load_field(self, "exceptions", e)
 
 
 class ServiceDescription(Description):
     '''
-    Defines the API for clients and services.
+    Define an API for clients and services.
     '''
-    reserved_fields = ["exceptions", "operations"]
+    __reserved_fields__ = ["operations"]
 
     def __init__(self, json_obj):
         super(ServiceDescription, self).__init__(json_obj)
 
-        # Exceptions are basic Descriptions because
-        # right now, they have no attributes besides their name
-        exs = default_field(self._obj, "exceptions", list)
-        ex_objs = [Description(ex) for ex in exs]
-        self._obj["exceptions"] = dict((ex.name, ex) for ex in ex_objs)
-
-        ops = default_field(self._obj, "operations", list)
-        op_objs = [OperationDescription(op) for op in ops]
-        self._obj["operations"] = dict((op.name, op) for op in op_objs)
-
-    @cached_property
-    def operations(self):
-        return self._obj["operations"]
-
-    @cached_property
-    def exceptions(self):
-        return self._obj["exceptions"]
+        os = {}
+        operations = default_field(json_obj, "operations", dict)
+        for name, operation in six.iteritems(operations):
+            if "name" not in operation:
+                operation["name"] = name
+            os[name] = OperationDescription(operation)
+        load_field(self, "operations", os)

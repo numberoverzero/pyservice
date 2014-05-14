@@ -1,8 +1,9 @@
 import logging
 import inspect
 import bottle
-from pyservice import serialize, extension
 from pyservice.exception_factory import ExceptionContainer
+from pyservice.serialize import serialize
+from pyservice.extension import extension
 logger = logging.getLogger(__name__)
 
 
@@ -13,21 +14,27 @@ class Service(object):
     # =================
     # Operations
     # =================
-    # Operations are defined in the service's ServiceDescription,
-    # and should be mapped to a function with the same signature
+    # Operations are defined in the service's Description,
+    # and should be mapped to a function with the same input
     # using the Serivice.operation decorator
 
     description = ServiceDescription({
         "name": "some_service",
-        "operations": [
-            {
-                "name": "echo",
-                "input": ["value1, value2"],
-                "output": ["result1", "result2"]
+        "operations": {
+            "echo": {
+                "input": {
+                    "value1": {},
+                    "value2": {}
+                },
+                "output": {
+                    "result1": {},
+                    "result2": {}
+                }
             }
-        ]
+        }
     })
     service = Service(description)
+
     @service.operation("echo")
     def echo_func(value1, value2):
         return value1, value2
@@ -70,48 +77,13 @@ class Service(object):
         return tasks[task_id]  # Can raise KeyError
 
     # =================
-    # Metadata
-    # =================
-    # service config is loaded from three places, and
-    # has the following priority (decreasing):
-    # service.run(**config)
-    # Service(..., **config)
-    # service._description.metadata
-
-    description = ServiceDescription({
-        "name": "some_service",
-        "operations": ["void"],
-        "metadata_attr": ["a", "list"],
-        "all_attr": True
-    })
-
-    init_config = {
-        "all_attr": False,
-        "init_config_attr": ["some", "values"]
-    }
-
-    run_config = {
-        "all_attr": [True, False],
-        "run_config_attr": ["other", "values"]
-    }
-
-    service = Service(description, **config)
-
-    assert [True, False] == service.config.get("all_attr", "default")
-    assert ["other", "values"] == service.config.get("run_config_attr", "default")
-    assert ["some", "values"] == service.config.get("init_config_attr", "default")
-    assert ["a", "list"] == service.config.get("metadata_attr", "default")
-    assert "default" == service.config.get("none", "default")
-    assert None is service.config.get("no default")
-
-    # =================
     # Extensions
     # =================
     # See the readme section on client/service extensions.
     '''
     def __init__(self, description, serializer, **config):
         self.config = {}
-        self.config.update(description.metadata)
+        self.config.update(description)
         self.config.update(config)
 
         self._description = description

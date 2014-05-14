@@ -1,215 +1,142 @@
 import six
 import sys
 import logging
-from pyservice import serialize, handlers, extension
+import functools
 from pyservice.exception_factory import ExceptionContainer
+from pyservice.serialize import JsonSerializer
+from pyservice.handlers import RequestsHandler
+from pyservice.extension import execute
+from pyservice.docstrings import docstring
+from pyservice.util import filtered_copy
 logger = logging.getLogger(__name__)
 
 
-class Client(object):
+class _InternalClient(object):
     '''
-    # Local endpoint for a service
-
-    # =================
-    # Operations
-    # =================
-    # Operations are defined in the client's ServiceDescription,
-    # and can be invoked as methods on the client.
-
-    description = ServiceDescription({
-        "name": "some_service",
-        "operations": [
-            {
-                "name": "echo",
-                "input": ["value1, value2"],
-                "output": ["result1, result2"]
-            }
-        ]
-    })
-    echoer = Client(description)
-    first, second = echoer.echo("Hello", "World")
-    assert first == "Hello"
-    assert second == "World"
-
-    # =================
-    # Exceptions
-    # =================
-    # Client functions throw real exceptions,
-    # which are namespaced under client.exceptions.
-
-    description = ServiceDescription({
-        "name": "tasker",
-        "operations": [
-            {
-                "name": "get_task",
-                "input": ["task_id"],
-                "output": ["name, description"]
-            },
-            {
-                "name": "add_task",
-                "input": ["name", "description"],
-                "outout": ["task_id"]
-            }
-        ],
-        "exceptions": [
-            "KeyError",
-            "InvalidTaskName"
-        ]
-    })
-    todo = client(description)
-
-    # Built-in exceptions can be caught directly,
-    # and are also available under client.exceptions
-    try:
-        todo.get_task("InvalidKey")
-    except KeyError:
-        print("Unknown task_id")
-    # same behavior:
-    # except todo.ex.KeyError:
-    #    print("Unknown task_id")
-
-
-    # Custom exceptions from the server are caught
-    # under client.exceptions, or client.ex for short
-    try:
-        todo.add_task("$_ invalid name", "this is a description")
-    except todo.ex.InvalidTaskName:
-        print("InvalidTaskName :(")
-
-    # =================
-    # Metadata
-    # =================
-    # client config is loaded from two places during __init__:
-    # **config, which takes precedence
-    # description.metadata
-    # If neither is provided, the default passed to _attr
-    # is returned
-
-    description = ServiceDescription({
-        "name": "some_service",
-        "operations": ["void"],
-        "metadata_attr": ["a", "list"],
-        "both_attr": True
-    })
-
-    config = {
-        "both_attr": False,
-        "config_attr": ["some", "values"]
-    }
-    client = Client(description, **config)
-
-    assert ["a", "list"] == client.config.get("metadata_attr", "default")
-    assert False == client.config.get("both_attr", "default")
-    assert ["some", "values"] == client.config.get("config_attr", "default")
-    assert "default" == client.config.get("neither_attr", "default")
-    assert None is client.config.get("no default")
-
-    # =================
-    # Extensions
-    # =================
-    # See the readme section on client/service extensions.
+    Does most of Client's heavy lifting - not part of the Client class because a
+    Client dynamically binds operations to itself, and this minimizes the chance
+    of a clash if operation naming restrictions are relaxed in the future (such
+    as allowing leading underscores).
     '''
-    def __init__(self, description, handler, serializer, **config):
+    def __init__(self, client, description, handler, serializer):
+        self.external_client = client
+        self.description = description
         self.handler = handler
-
-        self.config = {}
-        self.config.update(description.metadata)
-        self.config.update(config)
-
-        self._description = description
-        service = self._description.name
-
-        for operation in self._description.operations:
-            def make_call_op(operation):
-                # We need this nested function to create
-                # a scope for the operation variable,
-                # otherwise it gets the last value of the var
-                # in the for loop it's under.
-                return lambda *args: self._call(operation, *args)
-            func = make_call_op(operation)
-            setattr(self, operation, func)
-            self.handler.register(service, operation, self, **self.config)
-
         self.serializer = serializer
-        self.ex = self.exceptions = ExceptionContainer()
-        self._extensions = []
 
-    def add_extension(self, extension):
-        self._extensions.append(extension)
-        logger.debug("Registered extension '{}'".format(extension))
+    def call(self, operation, **input):
+        # Client sends input, meta to service
+        # Service sends output, meta to client
+        extensions = self.external_client.extensions[:] + [self]
+        context = {
+            "input": input,
+            "meta": {},
+            "output": {},
+            "operation": operation,
+            "extensions": extensions,
+            "client": self
+        }
+        fire = functools.partial(execute, extensions, operation, context)
 
-    def _call(self, operation, *args):
         try:
-            self.execute("before_operation", operation)
-
-            # list -> dict
-            desc_input = self._description.operations[operation].input
-            signature = [field.name for field in desc_input]
-            dict_input = serialize.to_dict(signature, args)
-
-            # dict -> wire -> dict
-            context = {
-                "input": dict_input,
-                "output": {},
-                "operation": operation,
-                "client": self
-            }
-            # Eventually calls self.handle_operation
-            self.execute("handle_operation", context)
-
-            # dict -> list
-            try:
-                desc_output = self._description.operations[operation].output
-                signature = [field.name for field in desc_output]
-                result = serialize.to_list(signature, context["output"])
-            except Exception:
-                raise self.exceptions.ServiceException("Server returned invalid/incomplete response")
-
-            # Unpack empty lists and single values
-            if not signature:
-                return None
-            elif len(signature) == 1:
-                return result[0]
-            else:
-                return result
+            fire("before_operation")
+            fire("handle_operation")
+            return filtered_copy(
+                context["output"].items(),
+                self.description.operations[operation].output
+            )
         finally:
-            self.execute("after_operation", operation)
+            fire("after_operation")
 
-    def execute(self, method, *args):
-        extensions = self._extensions[:] + [self]
-        extension.execute(extensions, method, *args)
-
-    def handle_operation(self, context, next_handler):
+    def handle_operation(self, operation, context, next_handler):
         # dict -> wire
-        data = self.serializer.serialize(context["input"])
+        data_out = self.serializer.serialize({
+            "input": context["input"],
+            "meta": context["meta"]
+        })
 
         # wire -> wire
         try:
-            response = self.handler.handle(self._description.name, context["operation"], data)
+            response = self.handler.handle(
+                self.description.name, operation, data_out)
         except Exception:
-            exc_type, exc_value, exc_traceback = sys.exc_info()
-            exc_type = self.exceptions.ServiceException
-            exc_value = exc_type(exc_value)
-            six.reraise(exc_type, exc_value, tb=exc_traceback)
+            msg = "Exception while handling operation '{}'' in service '{}'"
+            logger.warn(msg.format(
+                operation, self.description.name))
+            raise
 
         # wire -> dict
-        context["output"] = self.serializer.deserialize(response)
+        data_in = self.serializer.deserialize(response)
+        if "output" in data_in:
+            context["output"].update(data_in["output"])
+        if "meta" in data_in:
+            context["meta"].update(data_in["meta"])
 
-        # Exceptions in the handler so surrounding handlers can try/catch
-        self._handle_exception(context["output"])
+        # Process exceptions in the handler
+        # so surrounding extensions' handle_operation can try/catch
+        self.handle_exception(operation, context)
 
         next_handler(context)
 
-    def _handle_exception(self, output):
-        if "__exception" in output and len(output) == 1:
-            exception = output["__exception"]
-            ex_cls = getattr(self.exceptions, exception["cls"])
-            raise ex_cls(*exception["args"])
+    def handle_exception(self, operation, context):
+        '''
+        Note that exception classes are generated from the external_client,
+        since all consumers will be catching against external_client.exceptions.
+        '''
+        output = context["output"]
+        exceptions = self.description.operations[operation].exceptions
+        if "__exception" in output:
+            ex_name = output["__exception"]["cls"]
+            ex_args = output["__exception"]["args"]
+            ex_cls = getattr(self.external_client.exceptions, ex_name)
+            exception = ex_cls(*ex_args)
 
+            if ex_name not in exceptions:
+                # Exception was not in the list of declared exceptions for this
+                # operation - wrap in service exception and raise
+                wrap = self.external_client.exceptions.ServiceException
+                exception = wrap(*[
+                    "Unknown exception for operation {}".format(operation),
+                    exception
+                ])
+            raise exception
+
+
+@docstring
+class Client(object):
+    def __init__(self, description, handler, serializer):
+        self.operations = {}
+        self.exceptions = ExceptionContainer()
+        self.extensions = []
+
+        _client = _InternalClient(self, description, handler, serializer)
+        bind_operations(self, _client, description.operations)
+
+def bind_operations(client, internal_client, operations):
+        # We need this nested function to create
+        # a scope for the operation variable,
+        # otherwise it gets the last value of the var
+        # in the for loop it's under.
+        for operation in operations:
+            def make_call_op(operation):
+                return lambda **input: internal_client.call(
+                    operation, **input)
+            func = make_call_op(operation)
+
+            # Bind the operation function to the external client
+            setattr(client, operation, func)
+            client.operations[operation] = func
+
+            #Register the operation with the internal client's handler
+            internal_client.handler.register(
+                internal_client.description.name,
+                operation,
+                internal_client
+            )
 
 class WebServiceClient(Client):
     '''Uses requests to make json calls to a web service'''
-    def __init__(self, description, **config):
-        handler = handlers.RequestsHandler()
-        serializer = serialize.JsonSerializer()
-        super(WebServiceClient, self).__init__(description, handler, serializer, **config)
+    def __init__(self, description):
+        handler = RequestsHandler()
+        serializer = JsonSerializer()
+        super(WebServiceClient, self).__init__(description, handler, serializer)
