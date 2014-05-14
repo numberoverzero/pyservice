@@ -76,14 +76,14 @@ class Service(object):
             # internal failure
             fire("after_operation")
             # Always give context back to the handler, so it can pass along
-            # request, __exception
+            # request and __exception
             return context
 
     def handle_operation(self, operation, context, next_handler):
         # https://docs.python.org/3/library/inspect.html#inspect.BoundArguments
         f = self.functions[operation]
-        bound_params = f["sig"].bind(**context["request"])
-        result = f["func"](*bound_params.args, **bound_params.kwargs)
+        bound_args = f["sig"].bind(**context["request"])
+        result = f["func"](*bound_args.args, **bound_args.kwargs)
 
         # TODO: validate result against expected service output
 
