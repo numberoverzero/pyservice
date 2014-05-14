@@ -30,8 +30,8 @@ class _InternalClient(object):
             # Meta about this operation
             "extensions": extensions,
             "operation": operation,
-            "client": self.external_client,  # External so extensions have
-                                             # easy access to client.exceptions
+            "client": self.external_client  # External so extensions have
+                                            # easy access to client.exceptions
         }
         fire = functools.partial(execute, extensions, operation, context)
 
@@ -99,26 +99,25 @@ class Client(object):
         bind_operations(self, _client, description.operations)
 
 def bind_operations(client, internal_client, operations):
-        # We need this nested function to create
-        # a scope for the operation variable,
-        # otherwise it gets the last value of the var
-        # in the for loop it's under.
-        for operation in operations:
-            def make_call_op(operation):
-                return lambda **input: internal_client.call(
-                    operation, **input)
-            func = make_call_op(operation)
+    # We need this nested function to create a scope for the operation
+    # variable, otherwise it gets the last value of the var in the for
+    # loop that it's under.
+    for operation in operations:
+        def make_call_op(operation):
+            return lambda **input: internal_client.call(
+                operation, **input)
+        func = make_call_op(operation)
 
-            # Bind the operation function to the external client
-            setattr(client, operation, func)
-            client.operations[operation] = func
+        # Bind the operation function to the external client
+        setattr(client, operation, func)
+        client.operations[operation] = func
 
-            #Register the operation with the internal client's handler
-            internal_client.handler.register(
-                internal_client.description.name,
-                operation,
-                internal_client
-            )
+        #Register the operation with the internal client's handler
+        internal_client.handler.register(
+            internal_client.description.name,
+            operation,
+            internal_client
+        )
 
 class WebServiceClient(Client):
     '''Uses requests to make json calls to a web service'''

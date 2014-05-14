@@ -47,6 +47,88 @@ except client.ex.InvalidNumber e:
 # =================
 # See the readme section on client/service extensions."""
 
+docstring_Service="""
+# Remote endpoint for a service
+
+# =================
+# Operations
+# =================
+# Operations are defined in the service's Description,
+# and should be mapped to a function with the same input
+# using the Serivice.operation decorator
+
+description = ServiceDescription({
+    "name": "some_service",
+    "operations": {
+        "echo": {
+            "input": {
+                "value1": {},
+                "value2": {}
+            },
+            "output": {
+                "result1": {},
+                "result2": {}
+            }
+        }
+    }
+})
+service = Service(description)
+
+@service.operation("echo")
+def echo_func(value1, value2):
+    return value1, value2
+
+# =================
+# Exceptions
+# =================
+# Exceptions thrown are sent back to the client and raised
+# When not debugging, only whitelisted (included in
+# service description) exceptions are thrown -
+# all other exceptions are returned as a generic
+# ServiceException.
+# Like the Client, exceptions can be referenced
+# through the service itself.  Both of the following
+# are valid:
+#     raise service.exceptions.InvalidId
+#     raise InvalidId
+#
+# Note that this means exceptions are verified by NAME ONLY, although
+# this can be adjusted by overriding handle_exception
+
+description = ServiceDescription({
+    "name": "tasker",
+    "operations": {
+        {
+            "name": "get_task",
+            "input": {
+                "task_id": {}
+            },
+            "output": {
+                "name": {},
+                "description": {}
+            },
+            "exceptions": {
+                "KeyError": {},
+                "InvalidId": {}
+            }
+        }
+    }
+})
+service = Service(description)
+tasks = {}
+
+@service.operation("get_task")
+def operation(task_id):
+    if not valid_format(task_id):
+        raise InvalidId(task_id)
+    return tasks[task_id]  # Can raise KeyError
+
+# =================
+# Extensions
+# =================
+# See the readme section on client/service extensions.
+"""
+
 docstring_extension="""#Creates an Extension that only overrides the
 # handle_operation function.  use the 'yield' keyword to indicate where the rest
 # of the operation handler chain should be invoked.  Optionally yield an
@@ -99,6 +181,7 @@ def ProtectVirus(operation, context):
 
 docs = {
     'Client': docstring_Client,
+    'Service': docstring_Service,
     'extension': docstring_extension
 }
 

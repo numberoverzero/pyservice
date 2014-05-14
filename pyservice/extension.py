@@ -37,7 +37,7 @@ class Extension(object):
 def extension(func, hook="handle_operation"):
     # func isn't a func, it's a hook name
     if not callable(func):
-        return functools.partial(hook=func)
+        return functools.partial(extension, hook=func)
 
     if hook not in Extension.hooks:
         raise ValueError("Unknown hook '{}'".format(hook))
