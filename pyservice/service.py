@@ -7,7 +7,7 @@ from pyservice.handlers import BottleHandler
 from pyservice.extension import execute
 from pyservice.docstrings import docstring
 from pyservice.util import filtered_copy
-from pyservice.signature import signature
+from pyservice.binding import Binding
 logger = logging.getLogger(__name__)
 
 
@@ -38,15 +38,10 @@ class Service(object):
         if name not in self.description.operations:
             raise ValueError("Unknown Operation '{}'".format(name))
 
-        expected_input = self.description.operations[name].input
-        sig = signature(func)
-
-        # TODO Validate signature against description input
-
-        self.functions[name] = {
-            "func": func,
-            "sig": sig
-        }
+        self.bindings[name] = Binding(
+            func,
+            self.description.operations[name].input,
+            self.description.operations[name].output)
         return func
 
     def call(self, operation, request):
@@ -80,10 +75,7 @@ class Service(object):
             return context
 
     def handle_operation(self, operation, context, next_handler):
-        # https://docs.python.org/3/library/inspect.html#inspect.BoundArguments
-        f = self.functions[operation]
-        bound_args = f["sig"].bind(**context["request"])
-        result = f["func"](*bound_args.args, **bound_args.kwargs)
+        result = self.bindings[operation](context["request"])
 
         # TODO: validate result against expected service output
 
