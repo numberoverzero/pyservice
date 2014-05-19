@@ -38,7 +38,7 @@ class _InternalClient(object):
 
         self.external_client = client
         self.description = description
-        self.serializer = serializers[self.config["json"]]
+        self.serializer = serializers[self.config["protocol"]]
 
         # https://mysite.com/api/{protocol}/{version}/{operation}
         self.uri = self.description["endpoint"].format(
