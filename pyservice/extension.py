@@ -9,20 +9,22 @@ logger = logging.getLogger(__name__)
 
 class Extension(object):
     '''
-    Service or Client extension - can add behavior before an operation starts,
-    a handler during operation execution, and behavior after an operation returns
+    Service or Client extension - can add behavior before an
+    operation starts, a handler during operation execution,
+    and behavior after an operation returns
     '''
     hooks = [
         "before_operation",
         "handle_operation",
         "after_operation"
     ]
+
     def __init__(self, obj, **kwargs):
         self.obj = obj
         obj._extentions.append(self)
         logger.debug(
             "Registered extension '{}' to object '{}'".format(
-            extension, obj._description.name))
+                extension, obj._description.name))
 
     def before_operation(self, operation, context, next):
         next(operation, context)
@@ -32,6 +34,7 @@ class Extension(object):
 
     def after_operation(self, operation, context, next):
         next(operation, context)
+
 
 @docstring
 def extension(func, hook="handle_operation"):
@@ -47,6 +50,7 @@ def extension(func, hook="handle_operation"):
         hook: _wrap_hook(hook, func)
     }
     return type(func.__name__, (Extension,), attrs)
+
 
 def _wrap_hook(hook, func):
     @functools.wraps
@@ -100,8 +104,10 @@ def _wrap_hook(hook, func):
             raise RuntimeError("extension didn't stop")
     return wrapper
 
+
 def execute(extensions, operation, context, hook):
     n = len(extensions)
+
     def next(operation, context):
         next.i += 1
         # Ran out of extensions

@@ -50,9 +50,7 @@ class _InternalClient(object):
         # https://mysite.com/api/rpc/3.0/{operation}
 
     def call(self, operation, **request):
-        '''
-        Entry point from external client call
-        '''
+        '''Entry point from external client call'''
         extensions = self.external_client.extensions[:] + [self]
         context = {
             "exception": {},
@@ -81,9 +79,7 @@ class _InternalClient(object):
                          strict=self.config.get("strict", True))
 
     def handle_operation(self, operation, context, next_handler):
-        '''
-        Invoked during fire("handle_operation")
-        '''
+        '''Invoked during fire("handle_operation")'''
         try:
             wire_out = self.serializer.serialize({"request": request})
             wire_in = requests.post(
@@ -112,7 +108,7 @@ class _InternalClient(object):
 
     def raise_exception(self, operation, context):
         '''
-        Note that exception classes are generated from the external_client,
+        Exception classes are generated from the external_client,
         since all consumers will be catching against
         external_client.exceptions.
         '''

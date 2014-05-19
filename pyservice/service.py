@@ -2,33 +2,44 @@ import bottle
 import functools
 import logging
 from pyservice.exception_factory import ExceptionContainer
-from pyservice.serialize import JsonSerializer
-from pyservice.handlers import BottleHandler
+from .serialize import serializers
 from pyservice.extension import execute
 from pyservice.docstrings import docstring
-from pyservice.util import filtered_copy
-from pyservice.binding import Binding
 logger = logging.getLogger(__name__)
+
+DEFAULT_CONFIG = {
+    "protocol": "json"
+}
 
 
 @docstring
 class Service(object):
-    def __init__(self, description, handler, **kwargs):
+    def __init__(self, description, **config):
+        self.config = dict(DEFAULT_CONFIG)
+        self.config.update(config)
+
         self.functions = {}
         self.exceptions = ExceptionContainer()
         self.extensions = []
 
         self.description = description
-        self.handler = handler
-        self.kwargs = kwargs or {}
 
-        service_name = self.description.name
-        pattern = "/{service}/<operation>".format(service=service_name)
-        self.handler.route(service_name, self, pattern)
+        # Building a bottle routing format
+        # https://mysite.com/api/{protocol}/{version}/{operation}
+        self.uri = self.description["endpoint"].format(
+            protocol="<protocol>",
+            version="<version>",
+            operation="<operation>"
+        )
 
-    def run(self, *args, **kwargs):
-        self.kwargs.update(kwargs)
-        self.handler.run(*args, **self.kwargs)
+        self.app = bottle.Bottle()
+        self.app.post(self.uri)(self.route)
+        self.serializer = serializers[self.config["protocol"]]
+
+    def run(self, *args, **config):
+        run_config = dict(self.config)
+        run_config.update(config)
+        self.handler.run(*args, **run_config)
 
     def operation(self, func, name=None):
         # func isn't a func, it's the operation name
@@ -36,25 +47,49 @@ class Service(object):
             return functools.partial(self.operation, name=func)
 
         if name not in self.description.operations:
-            raise ValueError("Unknown Operation '{}'".format(name))
+            raise ValueError("Unknown operation: " + name)
 
-        self.bindings[name] = Binding(
-            func,
-            self.description.operations[name].input,
-            self.description.operations[name].output)
+        self.functions[name] = func
         return func
 
+    def route(self, protcol, version, operation):
+        '''Entry point from bottle'''
+        if protocol != self.config["protocol"]:
+            bottle.abort(400, "Unsupported protocol: " + protocol)
+        if version != self.description["version"]:
+            bottle.abort(400, "Unsupported version: " + version)
+        if operation not in self.description.operations:
+            bottle.abort(404, "Unknown operation: " + operation)
+        try:
+            # Read request
+            body = bottle.request.body.read().decode("utf-8")
+            wire_in = self.serializer.deserialize(body)
+
+            # Process
+            request = wire_in["request"]
+            response = self.call(operation, request)
+
+            # Write response
+            wire_out = self.serializer.serialize({
+                "response": response.get("response", {}),
+                "exception": response.get("exception", {})
+            })
+            return wire_out
+        except Exception:
+            bottle.abort(500, "Internal Error")
+
     def call(self, operation, request):
-        '''Entry point from handler'''
+        '''Invoked from route'''
         extensions = self.extensions[:] + [self]
         context = {
-            "__exception": {},
+            "exception": {},
             "request": request,
             "response": {},
 
             # Meta about this operation
             "extensions": extensions,
             "operation": operation,
+            "description": self.description,
             "service": self
         }
         fire = functools.partial(execute, extensions, operation, context)
@@ -71,15 +106,11 @@ class Service(object):
             # internal failure
             fire("after_operation")
             # Always give context back to the handler, so it can pass along
-            # request and __exception
+            # request and exception
             return context
 
     def handle_operation(self, operation, context, next_handler):
-        result = self.bindings[operation](context["request"])
-
-        # TODO: validate result against expected service output
-
-        context["response"].update(result)
+        self.functions[operation](context["request"], context["response"])
         next_handler(operation, context)
 
     def raise_exception(self, operation, exception, context):
@@ -92,14 +123,7 @@ class Service(object):
             cls = "ServiceException"
             args = ["Internal Error"]
 
-        context["__exception"] = {
+        context["exception"] = {
             "cls": cls,
             "args": args
         }
-
-
-class WebService(Service):
-    def __init__(self, description, **kwargs):
-        serializer = JsonSerializer()
-        handler = BottleHandler(serializer)
-        super(WebService, self).__init__(description, handler, **kwargs)
