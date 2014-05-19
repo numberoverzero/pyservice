@@ -1,15 +1,12 @@
 import bottle
 import functools
 import logging
-from pyservice.exception_factory import ExceptionContainer
+from .common import DEFAULT_CONFIG, scrub_output
+from .exception_factory import ExceptionContainer
 from .serialize import serializers
-from pyservice.extension import execute
-from pyservice.docstrings import docstring
+from .extension import execute
+from .docstrings import docstring
 logger = logging.getLogger(__name__)
-
-DEFAULT_CONFIG = {
-    "protocol": "json"
-}
 
 
 @docstring
@@ -18,11 +15,10 @@ class Service(object):
         self.config = dict(DEFAULT_CONFIG)
         self.config.update(config)
 
-        self.functions = {}
         self.exceptions = ExceptionContainer()
-        self.extensions = []
-
         self.description = description
+        self.extensions = []
+        self.functions = {}
 
         # Building a bottle routing format
         # https://mysite.com/api/{protocol}/{version}/{operation}
@@ -39,7 +35,7 @@ class Service(object):
     def run(self, *args, **config):
         run_config = dict(self.config)
         run_config.update(config)
-        self.handler.run(*args, **run_config)
+        self.app.run(*args, **run_config)
 
     def operation(self, func, name=None):
         # func isn't a func, it's the operation name
@@ -102,11 +98,15 @@ class Service(object):
             # so that extensions can try/catch
             self.raise_exception(operation, exception, context)
         finally:
-            # Don't wrap this fire in try/catch, handler will catch as an
+            # Don't wrap this fire in try/catch, `route` will catch as an
             # internal failure
             fire("after_operation")
-            # Always give context back to the handler, so it can pass along
-            # request and exception
+            # After the after_operation event so we catch everything
+            scrub_output(
+                context, self.description[operation].output,
+                strict=self.config.get("strict", True))
+            # Always give context back to the `route` call, so it can
+            # pass along request and exception
             return context
 
     def handle_operation(self, operation, context, next_handler):

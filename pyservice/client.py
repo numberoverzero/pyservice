@@ -5,23 +5,8 @@ from .serialize import serializers
 from .exception_factory import ExceptionContainer
 from .extension import execute
 from .docstrings import docstring
+from .common import DEFAULT_CONFIG, scrub_output
 logger = logging.getLogger(__name__)
-
-DEFAULT_CONFIG = {
-    "protocol": "json",
-    "timeout": 2,
-    "strict" = True
-}
-
-
-def scrub_output(context, whitelist, strict=True):
-    r = context.get("response", None)
-    if r is None:
-        context["response"] = {}
-        return
-    if not strict:
-        return
-    context["response"] = {r[k] for k in whitelist}
 
 
 class _InternalClient(object):
@@ -74,9 +59,9 @@ class _InternalClient(object):
             fire("after_operation")
 
             # After the after_operation event so we catch everything
-            scrub_output(context,
-                         self.description[operation].output,
-                         strict=self.config.get("strict", True))
+            scrub_output(
+                context, self.description[operation].output,
+                strict=self.config.get("strict", True))
 
     def handle_operation(self, operation, context, next_handler):
         '''Invoked during fire("handle_operation")'''
