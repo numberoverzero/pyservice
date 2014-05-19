@@ -3,7 +3,7 @@ import functools
 import logging
 from .serialize import serializers
 from .exception_factory import ExceptionContainer
-from .extension import execute
+from .extension import extension_chain
 from .docstrings import docstring
 from .common import DEFAULT_CONFIG, scrub_output
 logger = logging.getLogger(__name__)
@@ -21,9 +21,10 @@ class _InternalClient(object):
         self.config = dict(DEFAULT_CONFIG)
         self.config.update(config)
 
-        self.external_client = client
+        self.ext_client = client
         self.description = description
         self.serializer = serializers[self.config["protocol"]]
+        self.chain = None
 
         # https://mysite.com/api/{protocol}/{version}/{operation}
         self.uri = self.description["endpoint"].format(
@@ -31,23 +32,22 @@ class _InternalClient(object):
             version=self.description["version"],
             operation="{operation}"  # Building a format string to use later
         )
-        # Now self.uri is something like:
-        # https://mysite.com/api/rpc/3.0/{operation}
 
     def call(self, operation, **request):
         '''Entry point from external client call'''
-        extensions = self.external_client.extensions[:] + [self]
+        if not self.chain:
+            self.chain = extension_chain(
+                self.ext_client.extensions[:] + [self])
         context = {
             "exception": {},
             "request": request,
             "response": {},
 
             # Meta for this operation
-            "extensions": extensions,
             "operation": operation,
-            "description" self.description,
-            "client": self.external_client  # External so extensions have
-                                            # easy access to client.exceptions
+            "description": self.description,
+            "client": self.ext_client  # External so extensions have
+                                       # easy access to client.exceptions
         }
         fire = functools.partial(execute, extensions, operation, context)
 
@@ -93,22 +93,22 @@ class _InternalClient(object):
 
     def raise_exception(self, operation, context):
         '''
-        Exception classes are generated from the external_client,
+        Exception classes are generated from the external client,
         since all consumers will be catching against
-        external_client.exceptions.
+        external client.exceptions.
         '''
         exception = context["exception"]
         exceptions = self.description.operations[operation].exceptions
 
         name = exception["cls"]
         args = exception["args"]
-        cls = getattr(self.external_client.exceptions, name)
+        cls = getattr(self.ext_client.exceptions, name)
         exception = cls(*args)
 
         if name not in exceptions:
             # Exception was not in the list of declared exceptions for this
             # operation - wrap in service exception and raise
-            wrap = self.external_client.exceptions.ServiceException
+            wrap = self.ext_client.exceptions.ServiceException
             exception = wrap(*[
                 "Unknown exception for operation {}".format(operation),
                 exception

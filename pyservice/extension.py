@@ -25,13 +25,13 @@ class Extension(object):
             "Registered extension '{}' to object '{}'".format(
                 extension, obj._description.name))
 
-    def before_operation(self, operation, context, next_handler):
+    def before_operation(self, next_handler, operation, context):
         next_handler(operation, context)
 
-    def handle_operation(self, operation, context, next_handler):
+    def handle_operation(self, next_handler, operation, context):
         next_handler(operation, context)
 
-    def after_operation(self, operation, context, next_handler):
+    def after_operation(self, next_handler, operation, context):
         next_handler(operation, context)
 
 
@@ -105,18 +105,39 @@ def _wrap_hook(hook, func):
     return wrapper
 
 
-def execute(extensions, operation, context, hook):
-    n = len(extensions)
+def noop(*args, **kwargs):
+    pass
 
-    def self(operation, context):
-        self.i += 1
-        # Ran out of extensions
-        if self.i >= n:
-            return
-        # Get the hook on the next extension
-        bound_hook = getattr(extensions[self.i], hook)
-        # Invoke the extension's hook with a callback to next
-        bound_hook(operation, context, self)
 
-    self.i = -1  # next will increment to 0 for first operation
-    self(operation, context)
+class Chain(object):
+    def __init__(self, objs):
+        self.__objs = objs
+        self.__chain = {}
+
+    def __getattr__(self, name):
+        # Bind the partial so next call avoids the __getattr__ overhead
+        func = functools.partial(self.__invoke, name)
+        setattr(self, name, func)
+        # Since we're only here once, compile the partial chain
+        self.__compile(name)
+
+        return func
+
+    def __compile(self, name):
+        next_obj = noop
+        for obj in reversed(self.__objs):
+            func = getattr(obj, name, None)
+            if func:
+                next_obj = functools.partial(func, next_obj)
+        self.__chain[name] = next_obj
+
+    def __invoke(self, name, *args, **kwargs):
+        return self.__chain[name](*args, **kwargs)
+
+
+def compiled_extension_chain(extensions):
+    '''Pre-compile extension hooks'''
+    chain = Chain(extensions)
+    for hook in Extension.hooks:
+        getattr(chain, hook)
+    return chain

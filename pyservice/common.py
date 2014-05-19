@@ -1,7 +1,7 @@
 DEFAULT_CONFIG = {
     "protocol": "json",
     "timeout": 2,
-    "strict" = True
+    "strict": True
 }
 
 

@@ -4,7 +4,7 @@ import logging
 from .common import DEFAULT_CONFIG, scrub_output
 from .exception_factory import ExceptionContainer
 from .serialize import serializers
-from .extension import execute
+from .extension import extension_chain
 from .docstrings import docstring
 logger = logging.getLogger(__name__)
 
@@ -19,6 +19,7 @@ class Service(object):
         self.description = description
         self.extensions = []
         self.functions = {}
+        self.chain = None
 
         # Building a bottle routing format
         # https://mysite.com/api/{protocol}/{version}/{operation}
@@ -76,7 +77,8 @@ class Service(object):
 
     def call(self, operation, request):
         '''Invoked from route'''
-        extensions = self.extensions[:] + [self]
+        if not self.chain:
+            self.chain = extension_chain(self.extensions[:] + [self])
         context = {
             "exception": {},
             "request": request,
