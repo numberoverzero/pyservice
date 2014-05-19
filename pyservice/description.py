@@ -13,6 +13,7 @@ def validate_key(key):
         raise ValueError("Invalid key: '{}'".format(key))
     return key
 
+
 def default_field(obj, field, cls):
     '''
     If field isn't found in obj, instantiate a new cls and insert it into obj
@@ -21,14 +22,17 @@ def default_field(obj, field, cls):
         obj[field] = cls()
     return obj[field]
 
+
 def build_reserved_fields(obj):
     for cls in obj.__class__.__mro__:
         cls_rf = getattr(cls, '__reserved_fields__', [])
         obj.reserved_fields.update(cls_rf)
 
+
 def load_field(obj, key, value):
     setattr(obj, key, value)
     obj.fields.add(key)
+
 
 def load_fields(obj, data, whitelist=None):
     '''
@@ -57,7 +61,7 @@ class Description(object):
     def __init__(self, json_obj, name=None):
         # Shortcut to build empty object out of a single string, a name
         if isinstance(json_obj, six.string_types):
-            json_obj = { "name": json_obj }
+            json_obj = {"name": json_obj}
         self.fields = set()
         self.reserved_fields = set()
         build_reserved_fields(self)
@@ -69,7 +73,7 @@ class Description(object):
 
     @classmethod
     def from_string(cls, string):
-        data = json.loads(string.replace('\n',''))
+        data = json.loads(string.replace('\n', ''))
         return cls.from_json(data)
 
     @classmethod
@@ -117,10 +121,14 @@ class ServiceDescription(Description):
     '''
     Define an API for clients and services.
     '''
-    __reserved_fields__ = ["operations"]
+    __reserved_fields__ = ["endpoint", "version", "operations"]
 
     def __init__(self, json_obj):
         super(ServiceDescription, self).__init__(json_obj)
+
+        # Load endpoint and version from object
+        # https://mysite.com/api/{protocol}/{version}/{operation}
+        load_fields(self, json_obj, ["endpoint", "version"])
 
         os = {}
         operations = default_field(json_obj, "operations", dict)
