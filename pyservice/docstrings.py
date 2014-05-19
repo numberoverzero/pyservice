@@ -1,4 +1,4 @@
-docstring_Client="""# Local endpoint for a service
+docstring_Client = """# Local endpoint for a service
 
 # =================
 # Operations
@@ -47,7 +47,7 @@ except client.ex.InvalidNumber e:
 # =================
 # See the readme section on client/service extensions."""
 
-docstring_Service="""
+docstring_Service = """
 # Remote endpoint for a service
 
 # =================
@@ -129,9 +129,9 @@ def operation(task_id):
 # See the readme section on client/service extensions.
 """
 
-docstring_extension="""#Creates an Extension that only overrides the
-# handle_operation function.  use the 'yield' keyword to indicate where the rest
-# of the operation handler chain should be invoked.  Optionally yield an
+docstring_extension = """#Creates an Extension that only overrides the
+# handle_operation function.  use the 'yield' keyword to indicate where the
+# rest of the operation handler chain should be invoked.  Optionally yield an
 # (operation, context) tuple or use a raw `yield` to pass the input operation
 # and context.
 
@@ -184,6 +184,7 @@ docs = {
     'Service': docstring_Service,
     'extension': docstring_extension
 }
+
 
 def docstring(obj):
     obj.__doc__ = docs.get(obj.__name__, obj.__doc__)
