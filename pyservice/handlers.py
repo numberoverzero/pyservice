@@ -1,84 +1,14 @@
+import bottle
 import functools
+from .serialize import serializers
 
 
-class ClientHandler(object):  # pragma: no cover
-    '''
-    Should handle 404, 500
-    '''
-    def register(self, service_name, operation, **kwargs):
-        pass
-    def handle(self, service_name, operation, request):
-        pass
+def to_wire(protocol, data):
+    return serializers[protocol]['serialize'](data)
 
 
-class ServiceHandler(object):  # pragma: no cover
-    '''
-    Can return 404, 500
-    '''
-    def route(self, service, pattern):
-        '''
-        Instruct the handler to delegate any request whose URI matches
-        `pattern` to the `service` to construct a response
-        '''
-        pass
-    def run(self, *args, **kwargs):
-        pass
-
-
-class RequestsHandler(ClientHandler):
-    URI = "{schema}://{host}:{port}/{service}/{{operation}}"
-    DEFAULT_OPTIONS = {
-        "schema": "https",
-        "host": "localhost",
-        "port": "8080",
-        "timeout": 5
-    }
-
-    def __init__(self, serializer, **kwargs):
-        import requests
-        self.serializer = serializer
-        self.kwargs = dict(RequestsHandler.DEFAULT_OPTIONS)
-        self.kwargs.update(kwargs)
-        self.uris = {}
-
-    def register(self, service_name, operation, **kwargs):
-        kwargs = dict(self.kwargs)
-        kwargs.update(kwargs)
-
-        key = (service_name, operation)
-        uri = RequestsHandler.URI.format(
-            schema = kwargs["schema"],
-            host = kwargs["host"],
-            port = kwargs["port"],
-            service = service_name,
-            operation = operation
-        )
-
-        timeout = kwargs["timeout"]
-        self.uris[key] = (uri, timeout)
-
-    def handle(self, service_name, operation, request):  # pragma: no cover
-        # Serialize request for wire
-        wire_out = self.serializer.serialize({"request": request})
-
-        # Load endpoint
-        key = (service_name, operation)
-        uri, timeout = self.uris[key]
-
-        # Wire request
-        wire_in = requests.post(uri, data=wire_out, timeout=timeout)
-
-        # TODO: Handle 404/500 here
-        #  response.raise_for_status()
-
-        # Deserialize response from wire
-        response = self.serializer.deserialize(wire_in.text)
-
-        # Always provide response, __exception values
-        return {
-            "response": response.get("response", {}),
-            "__exception": response.get("__exception", {})
-        }
+def from_wire(protocol, string):
+    return serializers[protocol]['deserialize'](string)
 
 
 class BottleHandler(ServiceHandler):  # pragma: no cover
@@ -86,18 +16,19 @@ class BottleHandler(ServiceHandler):  # pragma: no cover
         "debug": False
     }
 
-    def __init__(self, serializer, **kwargs):
+    def __init__(self, **kwargs):
         import bottle
-        self.serializer = serializer
+        self.serializers = {}
         self.kwargs = dict(BottleHandler.DEFAULT_OPTIONS)
         self.kwargs.update(kwargs)
         self.app = bottle.Bottle()
 
-    def route(self, service, pattern):
+    def route(self, service, description):
         '''
-        service is a pyservice.Service.  Any request URI that matches `pattern`
-        will invoke service.call(operation, request)
+        service is a pyservice.Service.  Build a URI pattern from description
+        that bottle will route to service.call(operation, request)
         '''
+        pattern = "/api/<service>/<version>/<operation>".format
         self.app.post(pattern)(functools.partial(self.call, service))
 
     def call(self, service, operation):

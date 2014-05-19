@@ -1,12 +1,27 @@
+import requests
 import functools
 import logging
-from pyservice.exception_factory import ExceptionContainer
-from pyservice.serialize import JsonSerializer
-from pyservice.handlers import RequestsHandler
-from pyservice.extension import execute
-from pyservice.docstrings import docstring
-from pyservice.util import filtered_copy
+from .serialize import serializers
+from .exception_factory import ExceptionContainer
+from .extension import execute
+from .docstrings import docstring
 logger = logging.getLogger(__name__)
+
+DEFAULT_CONFIG = {
+    "protocol": "json",
+    "timeout": 2,
+    "strict" = True
+}
+
+
+def scrub_output(context, whitelist, strict=True):
+    r = context.get("response", None)
+    if r is None:
+        context["response"] = {}
+        return
+    if not strict:
+        return
+    context["response"] = {r[k] for k in whitelist}
 
 
 class _InternalClient(object):
@@ -16,27 +31,43 @@ class _InternalClient(object):
     chance of a clash if operation naming restrictions are relaxed in the
     future (such as allowing leading underscores).
     '''
-    def __init__(self, client, description, handler):
+
+    def __init__(self, client, description, **config):
+        self.config = dict(DEFAULT_CONFIG)
+        self.config.update(config)
+
         self.external_client = client
         self.description = description
-        self.handler = handler
+        self.serializer = serializers[self.config["json"]]
+
+        # https://mysite.com/api/{protocol}/{version}/{operation}
+        self.uri = self.description["endpoint"].format(
+            protocol=self.config["protocol"],
+            version=self.description["version"],
+            operation="{operation}"  # Building a format string to use later
+        )
+        # Now self.uri is something like:
+        # https://mysite.com/api/rpc/3.0/{operation}
 
     def call(self, operation, **request):
+        '''
+        Entry point from external client call
+        '''
         extensions = self.external_client.extensions[:] + [self]
         context = {
-            "__exception": {},
+            "exception": {},
             "request": request,
             "response": {},
 
-            # Meta about this operation
+            # Meta for this operation
             "extensions": extensions,
             "operation": operation,
+            "description" self.description,
             "client": self.external_client  # External so extensions have
                                             # easy access to client.exceptions
         }
         fire = functools.partial(execute, extensions, operation, context)
 
-        # The good stuff
         try:
             fire("before_operation")
             fire("handle_operation")
@@ -44,10 +75,25 @@ class _InternalClient(object):
         finally:
             fire("after_operation")
 
+            # After the after_operation event so we catch everything
+            scrub_output(context,
+                         self.description[operation].output,
+                         strict=self.config.get("strict", True))
+
     def handle_operation(self, operation, context, next_handler):
+        '''
+        Invoked during fire("handle_operation")
+        '''
         try:
-            response = self.handler.handle(
-                self.description.name, operation, context["request"])
+            wire_out = self.serializer.serialize({"request": request})
+            wire_in = requests.post(
+                self.uri.format(operation=operation),
+                data=wire_out, timeout=self.config["timeout"])
+            response = self.serializer.deserialize(wire_in)
+            response = {
+                "response": response.get("response", {}),
+                "exception": response.get("exception", {})
+            }
         except Exception:
             msg = "Exception while handling operation '{}'' in service '{}'"
             logger.warn(msg.format(
@@ -55,11 +101,11 @@ class _InternalClient(object):
             raise
 
         context["response"].update(response["response"])
-        context["__exception"].update(response["__exception"])
+        context["exception"].update(response["exception"])
 
         # Raise here so surrounding extensions can
         # try/catch in handle_operation
-        if context["__exception"]:
+        if context["exception"]:
             self.raise_exception(operation, context)
 
         next_handler(operation, context)
@@ -70,7 +116,7 @@ class _InternalClient(object):
         since all consumers will be catching against
         external_client.exceptions.
         '''
-        exception = context["__exception"]
+        exception = context["exception"]
         exceptions = self.description.operations[operation].exceptions
 
         name = exception["cls"]
@@ -89,16 +135,6 @@ class _InternalClient(object):
         raise exception
 
 
-@docstring
-class Client(object):
-    def __init__(self, description, handler):
-        self.operations = {}
-        self.exceptions = ExceptionContainer()
-        self.extensions = []
-
-        _client = _InternalClient(self, description, handler)
-        bind_operations(self, _client, description.operations)
-
 def bind_operations(client, internal_client, operations):
     # We need this nested function to create a scope for the operation
     # variable, otherwise it gets the last value of the var in the for
@@ -113,16 +149,13 @@ def bind_operations(client, internal_client, operations):
         setattr(client, operation, func)
         client.operations[operation] = func
 
-        #Register the operation with the internal client's handler
-        internal_client.handler.register(
-            internal_client.description.name,
-            operation,
-            internal_client
-        )
 
-class WebServiceClient(Client):
-    '''Uses requests to make json calls to a web service'''
-    def __init__(self, description):
-        serializer = JsonSerializer()
-        handler = RequestsHandler(serializer)
-        super(WebServiceClient, self).__init__(description, handler)
+@docstring
+class Client(object):
+    def __init__(self, description, **config):
+        self.operations = {}
+        self.exceptions = ExceptionContainer()
+        self.extensions = []
+
+        _client = _InternalClient(self, description, **config)
+        bind_operations(self, _client, description.operations)
