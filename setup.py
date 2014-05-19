@@ -5,6 +5,7 @@ import os
 
 here = os.path.abspath(os.path.dirname(__file__))
 
+
 def read(*filenames, **kwargs):
     encoding = kwargs.get('encoding', 'utf-8')
     sep = kwargs.get('sep', '\n')
@@ -23,7 +24,7 @@ setup(
     url='http://github.com/numberoverzero/pyservice/',
     license='MIT',
     author='Joe Cross',
-    install_requires=['bottle', 'six', 'requests'],
+    install_requires=['bottle', 'requests'],
     author_email='joe.mcross@gmail.com',
     description='web services with python made easy',
     long_description=long_description,

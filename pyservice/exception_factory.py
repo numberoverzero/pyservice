@@ -1,55 +1,55 @@
-import six
+import builtins
 
 BUILTIN_EXCEPTIONS = [
-"ArithmeticError",
-"AssertionError",
-"AttributeError",
-"BaseException",
-"BufferError",
-"BytesWarning",
-"DeprecationWarning",
-"EOFError",
-"EnvironmentError",
-"Exception",
-"FloatingPointError",
-"FutureWarning",
-"GeneratorExit",
-"IOError",
-"ImportError",
-"ImportWarning",
-"IndentationError",
-"IndexError",
-"KeyError",
-"KeyboardInterrupt",
-"LookupError",
-"MemoryError",
-"NameError",
-"NotImplemented",
-"NotImplementedError",
-"OSError",
-"OverflowError",
-"PendingDeprecationWarning",
-"ReferenceError",
-"RuntimeError",
-"RuntimeWarning",
-"StandardError",
-"StopIteration",
-"SyntaxError",
-"SyntaxWarning",
-"SystemError",
-"SystemExit",
-"TabError",
-"TypeError",
-"UnboundLocalError",
-"UnicodeDecodeError",
-"UnicodeEncodeError",
-"UnicodeError",
-"UnicodeTranslateError",
-"UnicodeWarning",
-"UserWarning",
-"ValueError",
-"Warning",
-"ZeroDivisionError",
+    "ArithmeticError",
+    "AssertionError",
+    "AttributeError",
+    "BaseException",
+    "BufferError",
+    "BytesWarning",
+    "DeprecationWarning",
+    "EOFError",
+    "EnvironmentError",
+    "Exception",
+    "FloatingPointError",
+    "FutureWarning",
+    "GeneratorExit",
+    "IOError",
+    "ImportError",
+    "ImportWarning",
+    "IndentationError",
+    "IndexError",
+    "KeyError",
+    "KeyboardInterrupt",
+    "LookupError",
+    "MemoryError",
+    "NameError",
+    "NotImplemented",
+    "NotImplementedError",
+    "OSError",
+    "OverflowError",
+    "PendingDeprecationWarning",
+    "ReferenceError",
+    "RuntimeError",
+    "RuntimeWarning",
+    "StandardError",
+    "StopIteration",
+    "SyntaxError",
+    "SyntaxWarning",
+    "SystemError",
+    "SystemExit",
+    "TabError",
+    "TypeError",
+    "UnboundLocalError",
+    "UnicodeDecodeError",
+    "UnicodeEncodeError",
+    "UnicodeError",
+    "UnicodeTranslateError",
+    "UnicodeWarning",
+    "UserWarning",
+    "ValueError",
+    "Warning",
+    "ZeroDivisionError",
 ]
 
 
@@ -76,7 +76,7 @@ class ExceptionFactory(object):
             if not ex_cls:
                 ex_cls = self._build_exception(name)
         else:
-            ex_cls = getattr(six.moves.builtins, name, None)
+            ex_cls = getattr(builtins, name, None)
             # maybe the exception class was deleted? Who knows
             if ex_cls is None:
                 raise NameError("global name '{}' is not defined".format(name))
@@ -98,5 +98,6 @@ class ExceptionContainer(object):
     '''
     def __init__(self):
         self._factory = ExceptionFactory()
+
     def __getattr__(self, name):
         return self._factory.exception_cls(name)

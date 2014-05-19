@@ -1,5 +1,4 @@
 import re
-import six
 import json
 
 # Most names can only be \w*,
@@ -40,7 +39,7 @@ def load_fields(obj, data, whitelist=None):
     field is prohibited by the blacklist.
     '''
     whitelist = whitelist or []
-    for key, value in six.iteritems(data):
+    for key, value in data.items():
         key = validate_key(key)
         if key in obj.fields:
             # Already set, don't do anything
@@ -60,7 +59,7 @@ class Description(object):
 
     def __init__(self, json_obj, name=None):
         # Shortcut to build empty object out of a single string, a name
-        if isinstance(json_obj, six.string_types):
+        if isinstance(json_obj, str):
             json_obj = {"name": json_obj}
         self.fields = set()
         self.reserved_fields = set()
@@ -94,7 +93,7 @@ class OperationDescription(Description):
 
         i = {}
         inputs = default_field(json_obj, "input", dict)
-        for name, input in six.iteritems(inputs):
+        for name, input in inputs.items():
             if "name" not in input:
                 i["name"] = name
             i[name] = Description(input)
@@ -102,7 +101,7 @@ class OperationDescription(Description):
 
         o = {}
         outputs = default_field(json_obj, "output", dict)
-        for name, output in six.iteritems(outputs):
+        for name, output in outputs.items():
             if "name" not in output:
                 o["name"] = name
             o[name] = Description(output)
@@ -110,7 +109,7 @@ class OperationDescription(Description):
 
         e = {}
         exceptions = default_field(json_obj, "exceptions", dict)
-        for name, exception in six.iteritems(exceptions):
+        for name, exception in exceptions.items():
             if "name" not in exception:
                 exception["name"] = name
             e[name] = Description(exception)
@@ -132,7 +131,7 @@ class ServiceDescription(Description):
 
         os = {}
         operations = default_field(json_obj, "operations", dict)
-        for name, operation in six.iteritems(operations):
+        for name, operation in operations.items():
             if "name" not in operation:
                 operation["name"] = name
             os[name] = OperationDescription(operation)

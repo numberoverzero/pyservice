@@ -1,5 +1,4 @@
 import types
-import six
 import sys
 import functools
 import logging
@@ -26,14 +25,14 @@ class Extension(object):
             "Registered extension '{}' to object '{}'".format(
                 extension, obj._description.name))
 
-    def before_operation(self, operation, context, next):
-        next(operation, context)
+    def before_operation(self, operation, context, next_handler):
+        next_handler(operation, context)
 
-    def handle_operation(self, operation, context, next):
-        next(operation, context)
+    def handle_operation(self, operation, context, next_handler):
+        next_handler(operation, context)
 
-    def after_operation(self, operation, context, next):
-        next(operation, context)
+    def after_operation(self, operation, context, next_handler):
+        next_handler(operation, context)
 
 
 @docstring
@@ -44,9 +43,10 @@ def extension(func, hook="handle_operation"):
 
     if hook not in Extension.hooks:
         raise ValueError("Unknown hook '{}'".format(hook))
+
+    doc = "Generated Extension '{}' for the '{}' hook\n\n{}"
     attrs = {
-        "__doc__": "Generated Extension '{}' for the '{}' hook".format(
-            func.__name__, hook),
+        "__doc__": doc.format(func.__name__, hook, func.__doc__),
         hook: _wrap_hook(hook, func)
     }
     return type(func.__name__, (Extension,), attrs)
@@ -54,7 +54,7 @@ def extension(func, hook="handle_operation"):
 
 def _wrap_hook(hook, func):
     @functools.wraps
-    def wrapper(self, operation, context, next):
+    def wrapper(self, operation, context, next_handler):
         # Execute anything before the yield
         gen = func(operation, context)
 
@@ -64,7 +64,7 @@ def _wrap_hook(hook, func):
             return
 
         try:
-            yielded_value = six.advance_iterator(gen)
+            yielded_value = next(gen)
             # if there's a return of two values, push those into the next
             # handler.  Otherwise, use original operation/context
             if yielded_value and len(yielded_value) == 2:
@@ -76,7 +76,7 @@ def _wrap_hook(hook, func):
             return
 
         try:
-            next(operation, context)
+            next_handler(operation, context)
         except:
             # Why catch here if we're going to throw through the generator?
             #  The wrapped function isn't really a generator - it's a
@@ -95,7 +95,7 @@ def _wrap_hook(hook, func):
             gen.throw(instance)
 
         try:
-            six.advance_iterator(gen)
+            next(gen)
         except StopIteration:
             # Expected - nothing to yield
             return
@@ -108,15 +108,15 @@ def _wrap_hook(hook, func):
 def execute(extensions, operation, context, hook):
     n = len(extensions)
 
-    def next(operation, context):
-        next.i += 1
+    def self(operation, context):
+        self.i += 1
         # Ran out of extensions
-        if next.i >= n:
+        if self.i >= n:
             return
         # Get the hook on the next extension
-        bound_hook = getattr(extensions[next.i], hook)
+        bound_hook = getattr(extensions[self.i], hook)
         # Invoke the extension's hook with a callback to next
-        bound_hook(operation, context, next)
+        bound_hook(operation, context, self)
 
-    next.i = -1  # next will increment to 0 for first operation
-    next(operation, context)
+    self.i = -1  # next will increment to 0 for first operation
+    self(operation, context)
