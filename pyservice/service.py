@@ -30,10 +30,13 @@ class Service(object):
         )
 
         self.app = bottle.Bottle()
-        self.app.post(self.uri)(self.route)
+        self.app.post(self.uri)(self.call)
         self.serializer = serializers[self.config["protocol"]]
 
     def run(self, *args, **config):
+        # Snapshot the set of extensions when the service starts
+        self.chain = extension_chain(self.extensions[:] + [self])
+
         run_config = dict(self.config)
         run_config.update(config)
         self.app.run(*args, **run_config)
@@ -49,7 +52,7 @@ class Service(object):
         self.functions[name] = func
         return func
 
-    def route(self, protcol, version, operation):
+    def call(self, protcol, version, operation):
         '''Entry point from bottle'''
         if protocol != self.config["protocol"]:
             bottle.abort(400, "Unsupported protocol: " + protocol)
@@ -57,63 +60,58 @@ class Service(object):
             bottle.abort(400, "Unsupported version: " + version)
         if operation not in self.description.operations:
             bottle.abort(404, "Unknown operation: " + operation)
-        try:
-            # Read request
-            body = bottle.request.body.read().decode("utf-8")
-            wire_in = self.serializer.deserialize(body)
 
-            # Process
-            request = wire_in["request"]
-            response = self.call(operation, request)
-
-            # Write response
-            wire_out = self.serializer.serialize({
-                "response": response.get("response", {}),
-                "exception": response.get("exception", {})
-            })
-            return wire_out
-        except Exception:
-            bottle.abort(500, "Internal Error")
-
-    def call(self, operation, request):
-        '''Invoked from route'''
-        if not self.chain:
-            self.chain = extension_chain(self.extensions[:] + [self])
         context = {
             "exception": {},
-            "request": request,
+            "request": {},
             "response": {},
 
-            # Meta about this operation
-            "extensions": extensions,
+            # Meta for this operation
             "operation": operation,
             "description": self.description,
             "service": self
         }
-        fire = functools.partial(execute, extensions, operation, context)
 
         try:
-            fire("before_operation")
-            fire("handle_operation")
-        except Exception as exception:
-            # Catch exception here instead of inside handle_operation
-            # so that extensions can try/catch
-            self.raise_exception(operation, exception, context)
-        finally:
-            # Don't wrap this fire in try/catch, `route` will catch as an
-            # internal failure
-            fire("after_operation")
-            # After the after_operation event so we catch everything
+            self.chain.before_operation(operation, context)
+
+            # Read request
+            wire_in = bottle.request.body.read().decode("utf-8")
+            request = self.serializer.deserialize(wire_in)
+            context["request"] = request.get("request", {})
+
+            # Process
+            self.chain.handle_operation(operation, context)
+
+            # Note that copy/sanitize happens before the after handlers.
+            # This is so that the response can safely access
+            # extension-dependent values, such as objects from a sqlalchemy
+            # session.  Once the response is serialized, the after hook can
+            # do whatever it wants.
+
+            # Make a copy of the response/exception so we can scrub
+            out = {
+                "response": context.get("response", {}),
+                "exception": context.get("exception", {})
+            }
             scrub_output(
-                context, self.description[operation].output,
+                out, self.description[operation].output,
                 strict=self.config.get("strict", True))
-            # Always give context back to the `route` call, so it can
-            # pass along request and exception
-            return context
+
+            # Write response
+            wire_out = self.serializer.serialize(out)
+            return wire_out
+        except Exception:
+            bottle.abort(500, "Internal Error")
+        finally:
+            self.chain.after_operation(operation, context)
 
     def handle_operation(self, operation, context, next_handler):
-        self.functions[operation](context["request"], context["response"])
-        next_handler(operation, context)
+        try:
+            self.functions[operation](context["request"], context["response"])
+            next_handler(operation, context)
+        except Exception as exception:
+            self.raise_exception(self, operation, exception, context)
 
     def raise_exception(self, operation, exception, context):
         cls = exception.__class__.__name__
