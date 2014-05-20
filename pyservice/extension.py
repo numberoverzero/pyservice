@@ -54,7 +54,7 @@ def extension(func, hook="handle_operation"):
 
 def _wrap_hook(hook, func):
     @functools.wraps
-    def wrapper(self, operation, context, next_handler):
+    def wrapper(self, next_handler, operation, context):
         # Execute anything before the yield
         gen = func(operation, context)
 
