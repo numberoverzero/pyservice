@@ -1,5 +1,4 @@
 import requests
-import functools
 import logging
 from .serialize import serializers
 from .exception_factory import ExceptionContainer
@@ -33,7 +32,7 @@ class _InternalClient(object):
             operation="{operation}"  # Building a format string to use later
         )
 
-    def call(self, operation, **request):
+    def call(self, operation, request):
         '''Entry point from external client call'''
         if not self.chain:
             self.chain = extension_chain(
@@ -49,22 +48,23 @@ class _InternalClient(object):
             "client": self.ext_client  # External so extensions have
                                        # easy access to client.exceptions
         }
-        fire = functools.partial(execute, extensions, operation, context)
 
         try:
-            fire("before_operation")
-            fire("handle_operation")
+            self.chain.before_operation(operation, context)
+            self.chain.handle_operation(operation, context)
             return context["response"]
         finally:
-            fire("after_operation")
+            self.chain.after_operation(operation, context)
 
             # After the after_operation event so we catch everything
+            # This will occur before the return above, so we can still
+            # clean things up before they get back to the caller
             scrub_output(
                 context, self.description[operation].output,
                 strict=self.config.get("strict", True))
 
-    def handle_operation(self, operation, context, next_handler):
-        '''Invoked during fire("handle_operation")'''
+    def handle_operation(self, next_handler, operation, context):
+        '''Invoked during chain.handle_operation'''
         try:
             wire_out = self.serializer.serialize({"request": request})
             wire_in = requests.post(
@@ -122,8 +122,7 @@ def bind_operations(client, internal_client, operations):
     # loop that it's under.
     for operation in operations:
         def make_call_op(operation):
-            return lambda **input: internal_client.call(
-                operation, **input)
+            return lambda **request: internal_client.call(operation, request)
         func = make_call_op(operation)
 
         # Bind the operation function to the external client
