@@ -1,4 +1,6 @@
 import json
+import logging
+logger = logging.getLogger(__name__)
 
 """
 Add your own serializers, and key off format
@@ -13,9 +15,11 @@ string = serializers[format]['serialize'](dict)
 
 class JsonSerializer(object):
     def serialize(self, data):
+        logger.debug("serialize {}".format(data))
         return json.dumps(data)
 
     def deserialize(self, string):
+        logger.debug("deserialize {}".format(string))
         return json.loads(string)
 
 
