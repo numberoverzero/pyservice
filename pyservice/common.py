@@ -12,4 +12,4 @@ def scrub_output(context, whitelist, strict=True):
         return
     if not strict:
         return
-    context["response"] = {r[k] for k in whitelist}
+    context["response"] = {k: r[k] for k in whitelist}
