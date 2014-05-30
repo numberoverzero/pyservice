@@ -57,30 +57,28 @@ class ExceptionFactory(object):
     '''
     Class for building and storing Exception types.
     Built-in exception names are reserved.
-
-
     '''
     def __init__(self):
         self._exceptions = {}
 
     def _build_exception(self, name):
-        ex_cls = self._exceptions[name] = type(name, (Exception,), {})
-        return ex_cls
-
-    def exception(self, name, *args):
-        return self.exception_cls(name)(*args)
+        self._exceptions[name] = type(name, (Exception,), {})
+        return self._exceptions[name]
 
     def exception_cls(self, name):
         if name not in BUILTIN_EXCEPTIONS:
-            ex_cls = self._exceptions.get(name, None)
-            if not ex_cls:
-                ex_cls = self._build_exception(name)
+            cls = self._exceptions.get(name, None)
+            if not cls:
+                cls = self._build_exception(name)
         else:
-            ex_cls = getattr(builtins, name, None)
+            cls = getattr(builtins, name, None)
             # maybe the exception class was deleted? Who knows
-            if ex_cls is None:
+            if cls is None:
                 raise NameError("global name '{}' is not defined".format(name))
-        return ex_cls
+        return cls
+
+    def exception(self, name, *args):
+        return self.exception_cls(name)(*args)
 
 
 class ExceptionContainer(object):
