@@ -28,7 +28,7 @@ class Service(object):
             version="<version>",
             operation="<operation>"
         )
-        logger.debug("Service uri is {}".format(self.uri))
+        logger.info("Service uri is {}".format(self.uri))
 
         self.app = bottle.Bottle()
         self.app.post(self.uri)(self.call)
