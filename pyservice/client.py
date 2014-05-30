@@ -26,16 +26,24 @@ class _InternalClient(object):
         self.fire = None
 
         # https://mysite.com/api/{protocol}/{version}/{operation}
-        self.uri = self.description["endpoint"].format(
+        uri = self.description
+        self.uri = "{scheme}://{host}:{port}{path}".format(
+            **self.description.endpoint
+        )
+        self.uri = self.uri.format(
             protocol=self.config["protocol"],
-            version=self.description["version"],
+            version=self.description.version,
             operation="{operation}"  # Building a format string to use later
         )
+        logger.info("Service uri is {}".format(self.uri))
 
     def call(self, operation, request):
         '''Entry point from external client call'''
         if not self.fire:
-            self.fire = chain(self.ext_client.extensions[:] + [self])
+            self.fire = chain(self.ext_client.extensions[:] + [self], "handle")
+
+        logger.info("call(operation={o}, request={r})".format(
+            o=operation, r=request))
         context = {
             "exception": {},
             "request": request,
@@ -59,35 +67,33 @@ class _InternalClient(object):
             # This will occur before the return above, so we can still
             # clean things up before they get back to the caller
             scrub_output(
-                context, self.description[operation].output,
+                context, self.description.operations[operation].output,
                 strict=self.config.get("strict", True))
 
     def handle(self, next_handler, event, operation, context):
+        logger.debug("handle(event={event}, context={context})".format(
+            event=event, context=context))
         if event == "operation":
             try:
-                wire_out = self.serializer.serialize({"request": request})
+                wire_out = self.serializer.serialize(
+                    {"request": context["request"]})
                 wire_in = requests.post(
                     self.uri.format(operation=operation),
                     data=wire_out, timeout=self.config["timeout"])
-                response = self.serializer.deserialize(wire_in)
-                response = {
-                    "response": response.get("response", {}),
-                    "exception": response.get("exception", {})
-                }
-            except Exception:
-                msg = "Exception while handling operation '{}'' in service '{}'"
-                logger.warn(msg.format(
-                    operation, self.description.name))
+                wire_in.raise_for_status()
+                r = self.serializer.deserialize(wire_in.text)
+                for key in ["response", "exception"]:
+                    context[key].update(r.get(key, {}))
+            except Exception as exception:
+                msg = "Exception during operation {}".format(operation)
+                logger.exception(msg, exc_info=exception)
                 raise
 
-            context["response"].update(response["response"])
-            context["exception"].update(response["exception"])
-
-            # Raise here so surrounding extensions can
-            # try/catch in handle_operation
             if context["exception"]:
+                # Raise here so surrounding extensions can try/catch
                 self.raise_exception(operation, context)
-            next_handler(event, operation, context)
+            else:
+                next_handler(event, operation, context)
         else:
             # Pass through
             next_handler(event, operation, context)
