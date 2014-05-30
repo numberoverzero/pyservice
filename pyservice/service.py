@@ -4,7 +4,7 @@ import logging
 from .common import DEFAULT_CONFIG, scrub_output
 from .exception_factory import ExceptionContainer
 from .serialize import serializers
-from .extension import extension_chain
+from .chain import chain
 from .docstrings import docstring
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ class Service(object):
         self.description = description
         self.extensions = []
         self.functions = {}
-        self.chain = None
+        self.fire = None
 
         # Building a bottle routing format
         # https://mysite.com/api/{protocol}/{version}/{operation}
@@ -35,16 +35,15 @@ class Service(object):
 
     def run(self, *args, **config):
         # Snapshot the set of extensions when the service starts
-        self.chain = extension_chain(self.extensions[:] + [self])
+        self.fire = chain(self.extensions[:] + [self], 'handle')
 
         run_config = dict(self.config)
         run_config.update(config)
         self.app.run(*args, **run_config)
 
-    def operation(self, func, name=None):
-        # func isn't a func, it's the operation name
-        if not callable(func):
-            return functools.partial(self.operation, name=func)
+    def operation(self, *, name, func=None):
+        if func is None:
+            return lambda func: self.operation(name=name, func=func)
 
         if name not in self.description.operations:
             raise ValueError("Unknown operation: " + name)
@@ -73,7 +72,7 @@ class Service(object):
         }
 
         try:
-            self.chain.before_operation(operation, context)
+            self.fire("before_operation", operation, context)
 
             # Read request
             wire_in = bottle.request.body.read().decode("utf-8")
@@ -81,7 +80,7 @@ class Service(object):
             context["request"] = request.get("request", {})
 
             # Process
-            self.chain.handle_operation(operation, context)
+            self.fire("operation", operation, context)
 
             # Note that copy/sanitize happens before the after handlers.
             # This is so that the response can safely access
@@ -104,14 +103,19 @@ class Service(object):
         except Exception:
             bottle.abort(500, "Internal Error")
         finally:
-            self.chain.after_operation(operation, context)
+            self.fire("after_operation", operation, context)
 
-    def handle_operation(self, operation, context, next_handler):
-        try:
-            self.functions[operation](context["request"], context["response"])
-            next_handler(operation, context)
-        except Exception as exception:
-            self.raise_exception(self, operation, exception, context)
+    def handle(self, next_handler, event, operation, context):
+        if event == "operation":
+            try:
+                func = self.functions[operation]
+                func(context["request"], context["response"])
+                next_handler(event, operation, context)
+            except Exception as exception:
+                self.raise_exception(self, operation, exception, context)
+        else:
+            # Pass through
+            next_handler(event, operation, context)
 
     def raise_exception(self, operation, exception, context):
         cls = exception.__class__.__name__

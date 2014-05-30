@@ -2,7 +2,7 @@ import requests
 import logging
 from .serialize import serializers
 from .exception_factory import ExceptionContainer
-from .extension import extension_chain
+from .chain import chain
 from .docstrings import docstring
 from .common import DEFAULT_CONFIG, scrub_output
 logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ class _InternalClient(object):
         self.ext_client = client
         self.description = description
         self.serializer = serializers[self.config["protocol"]]
-        self.chain = None
+        self.fire = None
 
         # https://mysite.com/api/{protocol}/{version}/{operation}
         self.uri = self.description["endpoint"].format(
@@ -34,9 +34,8 @@ class _InternalClient(object):
 
     def call(self, operation, request):
         '''Entry point from external client call'''
-        if not self.chain:
-            self.chain = extension_chain(
-                self.ext_client.extensions[:] + [self])
+        if not self.fire:
+            self.fire = chain(self.ext_client.extensions[:] + [self])
         context = {
             "exception": {},
             "request": request,
@@ -50,11 +49,11 @@ class _InternalClient(object):
         }
 
         try:
-            self.chain.before_operation(operation, context)
-            self.chain.handle_operation(operation, context)
+            self.fire("before_operation", operation, context)
+            self.fire("operation", operation, context)
             return context["response"]
         finally:
-            self.chain.after_operation(operation, context)
+            self.fire("after_operation", operation, context)
 
             # After the after_operation event so we catch everything
             # This will occur before the return above, so we can still
@@ -63,33 +62,35 @@ class _InternalClient(object):
                 context, self.description[operation].output,
                 strict=self.config.get("strict", True))
 
-    def handle_operation(self, next_handler, operation, context):
-        '''Invoked during chain.handle_operation'''
-        try:
-            wire_out = self.serializer.serialize({"request": request})
-            wire_in = requests.post(
-                self.uri.format(operation=operation),
-                data=wire_out, timeout=self.config["timeout"])
-            response = self.serializer.deserialize(wire_in)
-            response = {
-                "response": response.get("response", {}),
-                "exception": response.get("exception", {})
-            }
-        except Exception:
-            msg = "Exception while handling operation '{}'' in service '{}'"
-            logger.warn(msg.format(
-                operation, self.description.name))
-            raise
+    def handle(self, next_handler, event, operation, context):
+        if event == "operation":
+            try:
+                wire_out = self.serializer.serialize({"request": request})
+                wire_in = requests.post(
+                    self.uri.format(operation=operation),
+                    data=wire_out, timeout=self.config["timeout"])
+                response = self.serializer.deserialize(wire_in)
+                response = {
+                    "response": response.get("response", {}),
+                    "exception": response.get("exception", {})
+                }
+            except Exception:
+                msg = "Exception while handling operation '{}'' in service '{}'"
+                logger.warn(msg.format(
+                    operation, self.description.name))
+                raise
 
-        context["response"].update(response["response"])
-        context["exception"].update(response["exception"])
+            context["response"].update(response["response"])
+            context["exception"].update(response["exception"])
 
-        # Raise here so surrounding extensions can
-        # try/catch in handle_operation
-        if context["exception"]:
-            self.raise_exception(operation, context)
-
-        next_handler(operation, context)
+            # Raise here so surrounding extensions can
+            # try/catch in handle_operation
+            if context["exception"]:
+                self.raise_exception(operation, context)
+            next_handler(event, operation, context)
+        else:
+            # Pass through
+            next_handler(event, operation, context)
 
     def raise_exception(self, operation, context):
         '''
