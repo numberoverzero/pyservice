@@ -20,7 +20,7 @@ class _InternalClient(object):
         self.ext_client = client
         self.description = description
         self.serializer = serializers[self.config["protocol"]]
-        self.fire = None
+        self.event = None
 
         # https://mysite.com/api/{protocol}/{version}/{operation}
         uri = self.description
@@ -48,8 +48,8 @@ class _InternalClient(object):
 
     def call(self, operation, request):
         '''Entry point from external client call'''
-        if not self.fire:
-            self.fire = chain(self.extensions[:] + [self], "handle")
+        if not self.event:
+            self.event = chain(self.extensions[:] + [self], "handle")
 
         logger.info("call(operation={o}, request={r})".format(
             o=operation, r=request))
@@ -65,19 +65,24 @@ class _InternalClient(object):
                                        # easy access to client.exceptions
         }
 
+        successful_response = False
         try:
-            self.fire("before_operation", operation, context)
-            self.fire("operation", operation, context)
+            self.event("before_operation", operation, context)
+            self.event("operation", operation, context)
+            successful_response = True
             return context["response"]
         finally:
-            self.fire("after_operation", operation, context)
+            self.event("after_operation", operation, context)
 
             # After the after_operation event so we catch everything
             # This will occur before the return above, so we can still
-            # clean things up before they get back to the caller
-            scrub_output(
-                context, self.description.operations[operation].output,
-                strict=self.config.get("strict", True))
+            # clean things up before they get back to the caller.
+            if successful_response and not context["exception"]:
+                # Only clean up if we got a success response from the service
+                # and there wasn't a service-side exception
+                scrub_output(
+                    context, self.description.operations[operation].output,
+                    strict=self.config.get("strict", True))
 
     def handle(self, next_handler, event, operation, context):
         logger.debug("handle(event={event}, context={context})".format(
@@ -113,14 +118,13 @@ class _InternalClient(object):
         since all consumers will be catching against
         external client.exceptions.
         '''
-        exception = context["exception"]
-        exceptions = self.description.operations[operation].exceptions
 
+        exception = context["exception"]
         name = exception["cls"]
         args = exception["args"]
-        cls = getattr(self.exceptions, name)
-        exception = cls(*args)
+        exception = getattr(self.exceptions, name)(*args)
 
+        exceptions = self.description.operations[operation].exceptions
         whitelisted = name in exceptions
         debugging = self.config.get("debug", False)
         logger.debug("raise_exception(whitelist={w}, debugging={d})".format(
