@@ -120,7 +120,7 @@ class Service(object):
                 func(context["request"], context["response"])
                 next_handler(event, operation, context)
             except Exception as exception:
-                self.raise_exception(self, operation, exception, context)
+                self.raise_exception(operation, exception, context)
         else:
             # Pass through
             next_handler(event, operation, context)
@@ -131,6 +131,8 @@ class Service(object):
 
         whitelisted = cls in self.description.operations[operation].exceptions
         debugging = self.config.get("debug", False)
+        logging.debug("raise_exception(whitelist={w}, debugging={d})".format(
+            w=whitelisted, d=debugging))
         if not (whitelisted or debugging):
             cls = "ServiceException"
             args = ["Internal Error"]

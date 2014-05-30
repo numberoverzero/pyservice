@@ -16,10 +16,7 @@ class _InternalClient(object):
     future (such as allowing leading underscores).
     '''
 
-    def __init__(self, client, description, **config):
-        self.config = dict(DEFAULT_CONFIG)
-        self.config.update(config)
-
+    def __init__(self, client, description):
         self.ext_client = client
         self.description = description
         self.serializer = serializers[self.config["protocol"]]
@@ -37,10 +34,22 @@ class _InternalClient(object):
         )
         logger.info("Service uri is {}".format(self.uri))
 
+    @property
+    def config(self):
+        return self.ext_client.config
+
+    @property
+    def extensions(self):
+        return self.ext_client.extensions
+
+    @property
+    def exceptions(self):
+        return self.ext_client.exceptions
+
     def call(self, operation, request):
         '''Entry point from external client call'''
         if not self.fire:
-            self.fire = chain(self.ext_client.extensions[:] + [self], "handle")
+            self.fire = chain(self.extensions[:] + [self], "handle")
 
         logger.info("call(operation={o}, request={r})".format(
             o=operation, r=request))
@@ -109,13 +118,18 @@ class _InternalClient(object):
 
         name = exception["cls"]
         args = exception["args"]
-        cls = getattr(self.ext_client.exceptions, name)
+        cls = getattr(self.exceptions, name)
         exception = cls(*args)
 
-        if name not in exceptions:
-            # Exception was not in the list of declared exceptions for this
-            # operation - wrap in service exception and raise
-            wrap = self.ext_client.exceptions.ServiceException
+        whitelisted = name in exceptions
+        debugging = self.config.get("debug", False)
+        logging.debug("raise_exception(whitelist={w}, debugging={d})".format(
+            w=whitelisted, d=debugging))
+
+        if not (whitelisted or debugging):
+            # Not debugging and not an expected exception,
+            # wrap so it doesn't bubble up
+            wrap = self.exceptions.ServiceException
             exception = wrap(*[
                 "Unknown exception for operation {}".format(operation),
                 exception
@@ -143,6 +157,8 @@ class Client(object):
         self.operations = {}
         self.exceptions = ExceptionContainer()
         self.extensions = []
+        self.config = dict(DEFAULT_CONFIG)
+        self.config.update(config)
 
-        _client = _InternalClient(self, description, **config)
+        _client = _InternalClient(self, description)
         bind_operations(self, _client, description.operations)
