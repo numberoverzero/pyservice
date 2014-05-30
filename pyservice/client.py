@@ -123,7 +123,7 @@ class _InternalClient(object):
 
         whitelisted = name in exceptions
         debugging = self.config.get("debug", False)
-        logging.debug("raise_exception(whitelist={w}, debugging={d})".format(
+        logger.debug("raise_exception(whitelist={w}, debugging={d})".format(
             w=whitelisted, d=debugging))
 
         if not (whitelisted or debugging):

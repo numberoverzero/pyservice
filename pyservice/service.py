@@ -131,7 +131,7 @@ class Service(object):
 
         whitelisted = cls in self.description.operations[operation].exceptions
         debugging = self.config.get("debug", False)
-        logging.debug("raise_exception(whitelist={w}, debugging={d})".format(
+        logger.debug("raise_exception(whitelist={w}, debugging={d})".format(
             w=whitelisted, d=debugging))
         if not (whitelisted or debugging):
             cls = "ServiceException"
