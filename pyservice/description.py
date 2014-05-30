@@ -1,10 +1,7 @@
 import re
 import json
 
-# Most names can only be \w*,
-# with the special restriction that the
-# first character must be a letter
-NAME_RE = re.compile("^[a-zA-Z]\w*$")
+NAME_RE = re.compile("^\w+$")
 
 
 def validate_key(key):
@@ -33,19 +30,19 @@ def load_field(obj, key, value):
     obj.fields.add(key)
 
 
-def load_fields(obj, data, whitelist=None):
+def load_fields(obj, data, translations=None):
     '''
-    Any field included in whitelist will be inserted, even if that
-    field is prohibited by the blacklist.
+    translations is an optional mapping from input key to output key
+    ex.
+        translations = { '__name' : 'name'}
     '''
-    whitelist = whitelist or []
+    translations = translations or {}
     for key, value in data.items():
+        key = translations.get(key, key)
         key = validate_key(key)
         if key in obj.fields:
-            # Already set, don't do anything
             continue
-        if key in whitelist or key not in obj.reserved_fields:
-            load_field(obj, key, value)
+        load_field(obj, key, value)
 
 
 class Description(object):
@@ -60,11 +57,11 @@ class Description(object):
     def __init__(self, json_obj, name=None):
         # Shortcut to build empty object out of a single string, a name
         if isinstance(json_obj, str):
-            json_obj = {"name": json_obj}
+            json_obj = {"__name": json_obj}
         self.fields = set()
         self.reserved_fields = set()
         build_reserved_fields(self)
-        load_fields(self, json_obj, ["name"])
+        load_fields(self, json_obj, {"__name": "name"})
 
     @classmethod
     def from_json(cls, data):
@@ -94,24 +91,21 @@ class OperationDescription(Description):
         i = {}
         inputs = default_field(json_obj, "input", dict)
         for name, input in inputs.items():
-            if "name" not in input:
-                input["name"] = name
+            input["__name"] = input.get("__name", name)
             i[name] = Description(input)
         load_field(self, "input", i)
 
         o = {}
         outputs = default_field(json_obj, "output", dict)
         for name, output in outputs.items():
-            if "name" not in output:
-                output["name"] = name
+            output["__name"] = output.get("__name", name)
             o[name] = Description(output)
         load_field(self, "output", o)
 
         e = {}
         exceptions = default_field(json_obj, "exceptions", dict)
         for name, exception in exceptions.items():
-            if "name" not in exception:
-                exception["name"] = name
+            exception["__name"] = exception.get("__name", name)
             e[name] = Description(exception)
         load_field(self, "exceptions", e)
 
@@ -127,12 +121,15 @@ class ServiceDescription(Description):
 
         # Load endpoint and version from object
         # https://mysite.com/api/{protocol}/{version}/{operation}
-        load_fields(self, json_obj, ["endpoint", "version"])
+        load_fields(self, json_obj, {
+            "__name": "name",
+            "__version": "version",
+            "__endpoint": "endpoint"
+        })
 
         os = {}
         operations = default_field(json_obj, "operations", dict)
         for name, operation in operations.items():
-            if "name" not in operation:
-                operation["name"] = name
+            operation["__name"] = operation.get("__name", name)
             os[name] = OperationDescription(operation)
         load_field(self, "operations", os)
