@@ -19,7 +19,7 @@ class Service(object):
         self.description = description
         self.extensions = []
         self.functions = {}
-        self.fire = None
+        self.event = None
 
         # Building a bottle routing format
         # https://mysite.com/api/{protocol}/{version}/{operation}
@@ -36,11 +36,9 @@ class Service(object):
 
     def run(self, *args, **config):
         # Snapshot the set of extensions when the service starts
-        self.fire = chain(self.extensions[:] + [self], 'handle')
-
-        run_config = dict(self.config)
-        run_config.update(config)
-        self.app.run(*args, **run_config)
+        self.event = chain(self.extensions[:] + [self], 'handle')
+        self.config.update(config)
+        self.app.run(*args, **self.config)
 
     def operation(self, *, name, func=None):
         if func is None:
@@ -58,11 +56,19 @@ class Service(object):
             o=operation, p=protocol, v=version))
 
         if protocol != self.config["protocol"]:
-            bottle.abort(400, "Unsupported protocol: " + protocol)
+            msg = "Unsupported protocol {}".format(protocol)
+            logger.info(msg)
+            bottle.abort(400, msg)
+
         if version != self.description.version:
-            bottle.abort(400, "Unsupported version: " + version)
+            msg = "Unsupported version {}".format(version)
+            logger.info(msg)
+            bottle.abort(400, msg)
+
         if operation not in self.description.operations:
-            bottle.abort(404, "Unknown operation: " + operation)
+            msg = "Unsupported operation {}".format(operation)
+            logger.info(msg)
+            bottle.abort(404, msg)
 
         context = {
             "exception": {},
@@ -76,7 +82,7 @@ class Service(object):
         }
 
         try:
-            self.fire("before_operation", operation, context)
+            self.event("before_operation", operation, context)
 
             # Read request
             wire_in = bottle.request.body.read().decode("utf-8")
@@ -84,7 +90,7 @@ class Service(object):
             context["request"] = request.get("request", {})
 
             # Process
-            self.fire("operation", operation, context)
+            self.event("operation", operation, context)
 
             # Note that copy/sanitize happens before the after handlers.
             # This is so that the response can safely access
@@ -97,9 +103,11 @@ class Service(object):
                 "response": context.get("response", {}),
                 "exception": context.get("exception", {})
             }
-            scrub_output(
-                out, self.description.operations[operation].output,
-                strict=self.config.get("strict", True))
+            if not out["exception"]:
+                # Only clean up if there's valid output
+                scrub_output(
+                    out, self.description.operations[operation].output,
+                    strict=self.config.get("strict", True))
 
             # Write response
             wire_out = self.serializer.serialize(out)
@@ -109,7 +117,7 @@ class Service(object):
             logger.exception(msg, exc_info=exception)
             bottle.abort(500, "Internal Error")
         finally:
-            self.fire("after_operation", operation, context)
+            self.event("after_operation", operation, context)
 
     def handle(self, next_handler, event, operation, context):
         logger.debug("handle(event={event}, context={context})".format(
