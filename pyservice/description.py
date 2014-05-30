@@ -95,7 +95,7 @@ class OperationDescription(Description):
         inputs = default_field(json_obj, "input", dict)
         for name, input in inputs.items():
             if "name" not in input:
-                i["name"] = name
+                input["name"] = name
             i[name] = Description(input)
         load_field(self, "input", i)
 
@@ -103,7 +103,7 @@ class OperationDescription(Description):
         outputs = default_field(json_obj, "output", dict)
         for name, output in outputs.items():
             if "name" not in output:
-                o["name"] = name
+                output["name"] = name
             o[name] = Description(output)
         load_field(self, "output", o)
 
