@@ -23,11 +23,12 @@ class Service(object):
 
         # Building a bottle routing format
         # https://mysite.com/api/{protocol}/{version}/{operation}
-        self.uri = self.description["endpoint"].format(
+        self.uri = self.description.endpoint["path"].format(
             protocol="<protocol>",
             version="<version>",
             operation="<operation>"
         )
+        logger.debug("Service uri is {}".format(self.uri))
 
         self.app = bottle.Bottle()
         self.app.post(self.uri)(self.call)
@@ -51,11 +52,14 @@ class Service(object):
         self.functions[name] = func
         return func
 
-    def call(self, protcol, version, operation):
+    def call(self, protocol, version, operation):
         '''Entry point from bottle'''
+        logger.info("call(protocol={p}, version={v}, operation={o})".format(
+            o=operation, p=protocol, v=version))
+
         if protocol != self.config["protocol"]:
             bottle.abort(400, "Unsupported protocol: " + protocol)
-        if version != self.description["version"]:
+        if version != self.description.version:
             bottle.abort(400, "Unsupported version: " + version)
         if operation not in self.description.operations:
             bottle.abort(404, "Unknown operation: " + operation)
@@ -94,18 +98,22 @@ class Service(object):
                 "exception": context.get("exception", {})
             }
             scrub_output(
-                out, self.description[operation].output,
+                out, self.description.operations[operation].output,
                 strict=self.config.get("strict", True))
 
             # Write response
             wire_out = self.serializer.serialize(out)
             return wire_out
-        except Exception:
+        except Exception as exception:
+            msg = "Exception during operation {}".format(operation)
+            logger.exception(msg, exc_info=exception)
             bottle.abort(500, "Internal Error")
         finally:
             self.fire("after_operation", operation, context)
 
     def handle(self, next_handler, event, operation, context):
+        logger.debug("handle(event={event}, context={context})".format(
+            event=event, context=context))
         if event == "operation":
             try:
                 func = self.functions[operation]
