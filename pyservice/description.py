@@ -1,25 +1,14 @@
 import json
 
 
-def default_field(obj, field, cls):
-    '''
-    If field isn't found in obj, instantiate a new cls and insert it into obj
-    '''
+def build_field(obj, field, cls):
+    d = {}
     if field not in obj:
-        obj[field] = cls()
-    return obj[field]
-
-
-def load_fields(obj, data, translations=None):
-    '''
-    translations is an optional mapping from input key to output key
-    ex.
-        translations = { '__name' : 'name'}
-    '''
-    translations = translations or {}
-    for key, value in data.items():
-        key = translations.get(key, key)
-        setattr(obj, key, value)
+        obj[field] = dict()
+    for name, value in obj[field].items():
+        value["name"] = value.get("name", name)
+        d[name] = cls(value)
+    return d
 
 
 class Description(object):
@@ -27,7 +16,8 @@ class Description(object):
         # Shortcut to build empty object out of a single string, a name
         if isinstance(json_obj, str):
             json_obj = {"name": json_obj}
-        load_fields(self, json_obj)
+        for key, value in json_obj.items():
+            setattr(self, key, value)
 
     @classmethod
     def from_json(cls, data):
@@ -51,24 +41,8 @@ class OperationDescription(Description):
     '''
     def __init__(self, json_obj):
         super(OperationDescription, self).__init__(json_obj)
-
-        self.input = {}
-        inputs = default_field(json_obj, "input", dict)
-        for name, input in inputs.items():
-            input["name"] = input.get("name", name)
-            self.input[name] = Description(input)
-
-        self.output = {}
-        outputs = default_field(json_obj, "output", dict)
-        for name, output in outputs.items():
-            output["name"] = output.get("name", name)
-            self.output[name] = Description(output)
-
-        self.exceptions = {}
-        exceptions = default_field(json_obj, "exceptions", dict)
-        for name, exception in exceptions.items():
-            exception["name"] = exception.get("name", name)
-            self.exceptions[name] = Description(exception)
+        for field in ["input", "output", "exceptions"]:
+            setattr(self, field, build_field(json_obj, field, Description))
 
 
 class ServiceDescription(Description):
@@ -77,9 +51,5 @@ class ServiceDescription(Description):
     '''
     def __init__(self, json_obj):
         super(ServiceDescription, self).__init__(json_obj)
-
-        self.operations = {}
-        operations = default_field(json_obj, "operations", dict)
-        for name, operation in operations.items():
-            operation["name"] = operation.get("name", name)
-            self.operations[name] = OperationDescription(operation)
+        self.operations = build_field(
+            json_obj, "operations", OperationDescription)
