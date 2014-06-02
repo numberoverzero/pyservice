@@ -11,16 +11,6 @@ DEFAULT_CONFIG = {
 }
 
 
-def scrub_output(context, whitelist, strict=True):
-    r = context.get("response", None)
-    if r is None:
-        context["response"] = {}
-        return
-    if not strict:
-        return
-    context["response"] = {k: r[k] for k in whitelist}
-
-
 class Chain(object):
     __noop = lambda *a, **kw: None
 

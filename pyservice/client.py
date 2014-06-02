@@ -4,7 +4,6 @@ import logging
 from .serialize import serializers
 from .common import (
     DEFAULT_CONFIG,
-    scrub_output,
     Extensions,
     ExceptionFactory
 )
@@ -44,8 +43,6 @@ class Client(object):
             o=operation, r=request))
         context = {
             "exception": {},
-            "request": request,
-            "response": {},
 
             # Meta for this operation
             "operation": operation,
@@ -56,20 +53,22 @@ class Client(object):
         successful_response = False
         try:
             self.extensions("before_operation", operation, context)
+
+            # before/after don't have acces to request/response
+            context["request"] = request
+            context["response"] = {}
+
             self.extensions("operation", operation, context)
             successful_response = True
-            return context["response"]
+
+            # before/after don't have acces to request/response
+            result = context["response"]
+            del context["request"]
+            del context["response"]
+
+            return result
         finally:
             self.extensions("after_operation", operation, context)
-
-            try:
-                scrub_output(
-                    context, self.__description.operations[operation].output,
-                    strict=self.config.get("strict", True))
-            except KeyError:
-                # Don't throw if we fail to scrub output, probably means
-                # there was an exception and expected values are missing
-                pass
 
     def __handle(self, next_handler, event, operation, context):
         logger.debug("handle(event={event}, context={context})".format(

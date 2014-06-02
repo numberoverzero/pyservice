@@ -4,7 +4,6 @@ import logging
 from .serialize import serializers
 from .common import (
     DEFAULT_CONFIG,
-    scrub_output,
     Extensions,
     ExceptionFactory
 )
@@ -75,10 +74,8 @@ class Service(object):
 
         context = {
             "exception": {},
-            "request": {},
-            "response": {},
 
-            # Meta for this operation
+            # Meta
             "operation": operation,
             "description": self.description,
             "service": self
@@ -90,9 +87,11 @@ class Service(object):
             # Read request
             wire_in = bottle.request.body.read().decode("utf-8")
             request = self.serializer.deserialize(wire_in)
-            context["request"] = request.get("request", {})
 
-            # Process
+            # before/after don't have acces to request/response
+            context["request"] = request.get("request", {})
+            context["response"] = {}
+
             self.extensions("operation", operation, context)
 
             # Note that copy/sanitize happens before the after handlers.
@@ -101,22 +100,18 @@ class Service(object):
             # session.  Once the response is serialized, the after hook can
             # do whatever it wants.
 
-            # Make a copy of the response/exception so we can scrub
-            out = {
+            # Serialize before the after handlers.  This allows extension-
+            # dependent values, such as objects from a sqlalchemy session to be
+            # serialized before the session is closed.
+            wire_out = self.serializer.serialize({
                 "response": context.get("response", {}),
                 "exception": context.get("exception", {})
-            }
-            try:
-                scrub_output(
-                    out, self.description.operations[operation].output,
-                    strict=self.config.get("strict", True))
-            except KeyError:
-                # Don't throw if we fail to scrub output, probably means
-                # there was an exception and expected values are missing
-                pass
+            })
 
-            # Write response
-            wire_out = self.serializer.serialize(out)
+            # before/after don't have acces to request/response
+            del context["request"]
+            del context["response"]
+
             return wire_out
         except Exception as exception:
             msg = "Exception during operation {}".format(operation)
