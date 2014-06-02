@@ -4,6 +4,7 @@ import builtins
 import functools
 from .docstrings import docstring
 
+__noop = lambda *a, **kw: None
 DEFAULT_CONFIG = {
     "protocol": "json",
     "timeout": 2,
@@ -12,7 +13,6 @@ DEFAULT_CONFIG = {
 
 
 class Chain(object):
-    __noop = lambda *a, **kw: None
 
     def __init__(self, objs):
         # Private to avoid clashes when we setattr after compiling
@@ -20,7 +20,7 @@ class Chain(object):
         self.__call_partial = None
 
     def __compile(self, method):
-        _next = self.__noop
+        _next = __noop
         for obj in reversed(self.__objs):
             func = getattr(obj, method, None)
             if func:
@@ -72,12 +72,11 @@ class ExceptionFactory(object):
 
 
 class Extensions(object):
-    __noop = lambda *a, **kw: None
 
     def __init__(self, on_finalize=None):
         self.extensions = []
         self.finalized = False
-        self.on_finalize = on_finalize or self.__noop
+        self.on_finalize = on_finalize or __noop
 
     def finalize(self):
         if self.finalized:
