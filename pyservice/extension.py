@@ -1,55 +1,52 @@
 import types
 import sys
-import functools
 import logging
-from pyservice.docstrings import docstring
+from .docstrings import docstring
+from .chain import Chain
 logger = logging.getLogger(__name__)
 
 
-class Extension(object):
-    '''
-    Service or Client extension - can add behavior before an
-    operation starts, a handler during operation execution,
-    and behavior after an operation returns
-    '''
-    events = [
-        "before_operation",
-        "handle_operation",
-        "after_operation"
-    ]
+class Extensions(object):
+    __noop = lambda *a, **kw: None
 
-    def __init__(self, obj, **kwargs):
-        self.obj = obj
-        obj._extentions.append(self)
-        logger.debug(
-            "Registered extension '{}' to object '{}'".format(
-                extension, obj._description.name))
+    def __init__(self, on_finalize=None):
+        self.extensions = []
+        self.finalized = False
+        self.on_finalize = on_finalize or self.__noop
 
-    def handle(self, next_handler, event, *args, **kwargs):
-        next_handler(event, *args, **kwargs)
+    def finalize(self):
+        if self.finalized:
+            return
+        self.on_finalize()
+        self.finalized = True
+        logger.info("Extensions.finalize")
+        self.chain = Chain(self.extensions)
+
+    def append(self, extension):
+        if self.finalized:
+            raise ValueError("Cannot add an extension, already finalized")
+        else:
+            logger.info("append extension {}".format(extension))
+            self.extensions.append(extension)
+
+    def __call__(self, event, *args, **kwargs):
+        if not self.finalized:
+            self.finalize()
+        logger.info("extensions.call({}, {}, {})".format(event, args, kwargs))
+        return self.chain(event, *args, **kwargs)
 
 
 @docstring
-def extension(func, *, event="handle_operation"):
-    if event not in Extension.events:
-        raise ValueError("Unknown event '{}'".format(event))
-
-    doc = "Generated Extension '{}' for the '{}' event:\n\n{}"
-    attrs = {
-        "__doc__": doc.format(func.__name__, event, func.__doc__),
-        "handle": _wrap_hook(func, event)
-    }
-    return type(func.__name__, (Extension,), attrs)
+def Extension(func):
+    doc = "Generated extension from function '{}':\n\n{}".format(
+        func.__name__, func.__doc__)
+    extension = _create_extension(func)
+    extension.__doc__ = doc
+    return extension
 
 
-def _wrap_hook(func, expected_event):
-    @functools.wraps
+def _create_extension(func):
     def wrapper(self, next_handler, event, *args, **kwargs):
-        if event != expected_event:
-            # This extension doesn't handle the event, just pass through
-            next_handler(event, *args, **kwargs)
-            return
-
         # Execute anything before the yield
         gen = func(event, *args, **kwargs)
 
