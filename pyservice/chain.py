@@ -24,7 +24,6 @@ class Chain(object):
 
     def __init__(self, objs):
         # Private to avoid clashes when we setattr after compiling
-        logger.info("init chain, objs: {}".format(objs))
         self.__objs = objs
         self.__call_partial = None
 
@@ -46,7 +45,6 @@ class Chain(object):
 
     def __call__(self, *args, **kwargs):
         '''special case because __getattr__ does not handle __call__'''
-        logger.info("chain.call")
         if not self.__call_partial:
             self.__call_partial = self.__compile('__call__')
         return self.__call_partial(*args, **kwargs)

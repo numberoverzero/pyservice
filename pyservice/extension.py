@@ -1,9 +1,7 @@
 import types
 import sys
-import logging
 from .docstrings import docstring
 from .chain import Chain
-logger = logging.getLogger(__name__)
 
 
 class Extensions(object):
@@ -19,20 +17,17 @@ class Extensions(object):
             return
         self.on_finalize()
         self.finalized = True
-        logger.info("Extensions.finalize")
         self.chain = Chain(self.extensions)
 
     def append(self, extension):
         if self.finalized:
             raise ValueError("Cannot add an extension, already finalized")
         else:
-            logger.info("append extension {}".format(extension))
             self.extensions.append(extension)
 
     def __call__(self, event, *args, **kwargs):
         if not self.finalized:
             self.finalize()
-        logger.info("extensions.call({}, {}, {})".format(event, args, kwargs))
         return self.chain(event, *args, **kwargs)
 
 
