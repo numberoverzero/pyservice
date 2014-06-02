@@ -1,56 +1,42 @@
+import functools
 import requests
 import logging
 from .serialize import serializers
+from .extension import Extensions
 from .exception_factory import ExceptionContainer
-from .chain import chain
 from .docstrings import docstring
 from .common import DEFAULT_CONFIG, scrub_output
 logger = logging.getLogger(__name__)
 
 
-class _InternalClient(object):
-    '''
-    Does most of Client's heavy lifting - not part of the Client class because
-    a Client dynamically binds operations to itself, and this minimizes the
-    chance of a clash if operation naming restrictions are relaxed in the
-    future (such as allowing leading underscores).
-    '''
+@docstring
+class Client(object):
+    def __init__(self, description, **config):
+        self.config = dict(DEFAULT_CONFIG)
+        self.config.update(config)
+        self.operations = {}
+        self.exceptions = ExceptionContainer()
 
-    def __init__(self, client, description):
-        self.ext_client = client
-        self.description = description
-        self.serializer = serializers[self.config["protocol"]]
-        self.event = None
+        self.extensions = Extensions(  # Add __handle after all extensions
+            lambda: self.extensions.append(self.__handle))
+        self.__description = description
+        self.__serializer = serializers[self.config["protocol"]]
 
-        # https://mysite.com/api/{protocol}/{version}/{operation}
-        uri = self.description
-        self.uri = "{scheme}://{host}:{port}{path}".format(
-            **self.description.endpoint
-        )
-        self.uri = self.uri.format(
+        uri = "{scheme}://{host}:{port}{path}".format(
+            **self.__description.endpoint)
+        self.uri = uri.format(
             protocol=self.config["protocol"],
-            version=self.description.version,
-            operation="{operation}"  # Building a format string to use later
-        )
+            version=self.__description.version,
+            operation="{operation}")
         logger.info("Service uri is {}".format(self.uri))
 
-    @property
-    def config(self):
-        return self.ext_client.config
+        # Bind operations to self
+        for operation in self.__description.operations:
+            func = functools.partial(self, operation)
+            self.operations[operation] = func
+            setattr(self, operation, func)
 
-    @property
-    def extensions(self):
-        return self.ext_client.extensions
-
-    @property
-    def exceptions(self):
-        return self.ext_client.exceptions
-
-    def call(self, operation, request):
-        '''Entry point from external client call'''
-        if not self.event:
-            self.event = chain(self.extensions[:] + [self], "handle")
-
+    def __call__(self, operation, **request):
         logger.info("call(operation={o}, request={r})".format(
             o=operation, r=request))
         context = {
@@ -60,42 +46,40 @@ class _InternalClient(object):
 
             # Meta for this operation
             "operation": operation,
-            "description": self.description,
-            "client": self.ext_client  # External so extensions have
-                                       # easy access to client.exceptions
+            "description": self.__description,
+            "client": self
         }
 
         successful_response = False
         try:
-            self.event("before_operation", operation, context)
-            self.event("operation", operation, context)
+            self.extensions("before_operation", operation, context)
+            self.extensions("operation", operation, context)
             successful_response = True
             return context["response"]
         finally:
-            self.event("after_operation", operation, context)
+            self.extensions("after_operation", operation, context)
 
-            # After the after_operation event so we catch everything
-            # This will occur before the return above, so we can still
-            # clean things up before they get back to the caller.
-            if successful_response and not context["exception"]:
-                # Only clean up if we got a success response from the service
-                # and there wasn't a service-side exception
+            try:
                 scrub_output(
-                    context, self.description.operations[operation].output,
+                    context, self.__description.operations[operation].output,
                     strict=self.config.get("strict", True))
+            except KeyError:
+                # Don't throw if we fail to scrub output, probably means
+                # there was an exception and expected values are missing
+                pass
 
-    def handle(self, next_handler, event, operation, context):
+    def __handle(self, next_handler, event, operation, context):
         logger.debug("handle(event={event}, context={context})".format(
             event=event, context=context))
         if event == "operation":
             try:
-                wire_out = self.serializer.serialize(
+                wire_out = self.__serializer.serialize(
                     {"request": context["request"]})
                 wire_in = requests.post(
                     self.uri.format(operation=operation),
                     data=wire_out, timeout=self.config["timeout"])
                 wire_in.raise_for_status()
-                r = self.serializer.deserialize(wire_in.text)
+                r = self.__serializer.deserialize(wire_in.text)
                 for key in ["response", "exception"]:
                     context[key].update(r.get(key, {}))
             except Exception as exception:
@@ -105,14 +89,14 @@ class _InternalClient(object):
 
             if context["exception"]:
                 # Raise here so surrounding extensions can try/catch
-                self.raise_exception(operation, context)
+                self.__raise_exception(operation, context)
             else:
                 next_handler(event, operation, context)
         else:
             # Pass through
             next_handler(event, operation, context)
 
-    def raise_exception(self, operation, context):
+    def __raise_exception(self, operation, context):
         '''
         Exception classes are generated from the external client,
         since all consumers will be catching against
@@ -124,7 +108,7 @@ class _InternalClient(object):
         args = exception["args"]
         exception = getattr(self.exceptions, name)(*args)
 
-        exceptions = self.description.operations[operation].exceptions
+        exceptions = self.__description.operations[operation].exceptions
         whitelisted = name in exceptions
         debugging = self.config.get("debug", False)
         logger.debug("raise_exception(whitelist={w}, debugging={d})".format(
@@ -139,30 +123,3 @@ class _InternalClient(object):
                 exception
             ])
         raise exception
-
-
-def bind_operations(client, internal_client, operations):
-    # We need this nested function to create a scope for the operation
-    # variable, otherwise it gets the last value of the var in the for
-    # loop that it's under.
-    for operation in operations:
-        def make_call_op(operation):
-            return lambda **request: internal_client.call(operation, request)
-        func = make_call_op(operation)
-
-        # Bind the operation function to the external client
-        setattr(client, operation, func)
-        client.operations[operation] = func
-
-
-@docstring
-class Client(object):
-    def __init__(self, description, **config):
-        self.operations = {}
-        self.exceptions = ExceptionContainer()
-        self.extensions = []
-        self.config = dict(DEFAULT_CONFIG)
-        self.config.update(config)
-
-        _client = _InternalClient(self, description)
-        bind_operations(self, _client, description.operations)

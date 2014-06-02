@@ -2,9 +2,9 @@ import bottle
 import functools
 import logging
 from .common import DEFAULT_CONFIG, scrub_output
+from .extension import Extensions
 from .exception_factory import ExceptionContainer
 from .serialize import serializers
-from .chain import chain
 from .docstrings import docstring
 logger = logging.getLogger(__name__)
 
@@ -17,9 +17,10 @@ class Service(object):
 
         self.exceptions = ExceptionContainer()
         self.description = description
-        self.extensions = []
+        self.exceptions = ExceptionContainer()
+        self.extensions = Extensions(  # Add __handle after all extensions
+            lambda: self.extensions.append(self.__handle))
         self.functions = {}
-        self.event = None
 
         # Building a bottle routing format
         # https://mysite.com/api/{protocol}/{version}/{operation}
@@ -31,12 +32,12 @@ class Service(object):
         logger.info("Service uri is {}".format(self.uri))
 
         self.app = bottle.Bottle()
-        self.app.post(self.uri)(self.call)
+        self.app.post(self.uri)(self)
         self.serializer = serializers[self.config["protocol"]]
 
     def run(self, *args, **config):
         # Snapshot the set of extensions when the service starts
-        self.event = chain(self.extensions[:] + [self], 'handle')
+        self.extensions.finalize()
         self.config.update(config)
         self.app.run(*args, **self.config)
 
@@ -50,7 +51,7 @@ class Service(object):
         self.functions[name] = func
         return func
 
-    def call(self, protocol, version, operation):
+    def __call__(self, protocol, version, operation):
         '''Entry point from bottle'''
         logger.info("call(protocol={p}, version={v}, operation={o})".format(
             o=operation, p=protocol, v=version))
@@ -82,7 +83,7 @@ class Service(object):
         }
 
         try:
-            self.event("before_operation", operation, context)
+            self.extensions("before_operation", operation, context)
 
             # Read request
             wire_in = bottle.request.body.read().decode("utf-8")
@@ -90,7 +91,7 @@ class Service(object):
             context["request"] = request.get("request", {})
 
             # Process
-            self.event("operation", operation, context)
+            self.extensions("operation", operation, context)
 
             # Note that copy/sanitize happens before the after handlers.
             # This is so that the response can safely access
@@ -103,11 +104,14 @@ class Service(object):
                 "response": context.get("response", {}),
                 "exception": context.get("exception", {})
             }
-            if not out["exception"]:
-                # Only clean up if there's valid output
+            try:
                 scrub_output(
                     out, self.description.operations[operation].output,
                     strict=self.config.get("strict", True))
+            except KeyError:
+                # Don't throw if we fail to scrub output, probably means
+                # there was an exception and expected values are missing
+                pass
 
             # Write response
             wire_out = self.serializer.serialize(out)
@@ -117,9 +121,9 @@ class Service(object):
             logger.exception(msg, exc_info=exception)
             bottle.abort(500, "Internal Error")
         finally:
-            self.event("after_operation", operation, context)
+            self.extensions("after_operation", operation, context)
 
-    def handle(self, next_handler, event, operation, context):
+    def __handle(self, next_handler, event, operation, context):
         logger.debug("handle(event={event}, context={context})".format(
             event=event, context=context))
         if event == "operation":
