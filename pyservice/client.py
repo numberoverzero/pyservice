@@ -1,11 +1,14 @@
-import functools
 import requests
+import functools
 import logging
 from .serialize import serializers
-from .extension import Extensions
-from .exception_factory import ExceptionContainer
+from .common import (
+    DEFAULT_CONFIG,
+    scrub_output,
+    Extensions,
+    ExceptionContainer
+)
 from .docstrings import docstring
-from .common import DEFAULT_CONFIG, scrub_output
 logger = logging.getLogger(__name__)
 
 

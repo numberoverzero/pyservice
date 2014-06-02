@@ -1,10 +1,13 @@
 import bottle
 import functools
 import logging
-from .common import DEFAULT_CONFIG, scrub_output
-from .extension import Extensions
-from .exception_factory import ExceptionContainer
 from .serialize import serializers
+from .common import (
+    DEFAULT_CONFIG,
+    scrub_output,
+    Extensions,
+    ExceptionContainer
+)
 from .docstrings import docstring
 logger = logging.getLogger(__name__)
 

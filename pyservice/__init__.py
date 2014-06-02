@@ -1,7 +1,7 @@
-from pyservice.description import ServiceDescription
-from pyservice.client import Client
-from pyservice.service import Service
-from pyservice.extension import Extension
+from .description import ServiceDescription
+from .client import Client
+from .service import Service
+from .common import Extension
 
 __all__ = [
     "Client",
