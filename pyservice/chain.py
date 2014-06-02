@@ -15,8 +15,6 @@ fire = chain(handlers, 'handle')
 fire("init", data)
 """
 import functools
-import logging
-logger = logging.getLogger(__name__)
 
 
 class Chain(object):
@@ -38,7 +36,6 @@ class Chain(object):
     def __getattr__(self, name):
         # Bind the compiled partial to self so we avoid
         # __getattr__ overhead on the next call
-        logger.info("chain.getattr")
         func = self.__compile(name)
         setattr(self, name, func)
         return func

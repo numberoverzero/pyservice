@@ -1,57 +1,5 @@
 import builtins
 
-BUILTIN_EXCEPTIONS = [
-    "ArithmeticError",
-    "AssertionError",
-    "AttributeError",
-    "BaseException",
-    "BufferError",
-    "BytesWarning",
-    "DeprecationWarning",
-    "EOFError",
-    "EnvironmentError",
-    "Exception",
-    "FloatingPointError",
-    "FutureWarning",
-    "GeneratorExit",
-    "IOError",
-    "ImportError",
-    "ImportWarning",
-    "IndentationError",
-    "IndexError",
-    "KeyError",
-    "KeyboardInterrupt",
-    "LookupError",
-    "MemoryError",
-    "NameError",
-    "NotImplemented",
-    "NotImplementedError",
-    "OSError",
-    "OverflowError",
-    "PendingDeprecationWarning",
-    "ReferenceError",
-    "RuntimeError",
-    "RuntimeWarning",
-    "StandardError",
-    "StopIteration",
-    "SyntaxError",
-    "SyntaxWarning",
-    "SystemError",
-    "SystemExit",
-    "TabError",
-    "TypeError",
-    "UnboundLocalError",
-    "UnicodeDecodeError",
-    "UnicodeEncodeError",
-    "UnicodeError",
-    "UnicodeTranslateError",
-    "UnicodeWarning",
-    "UserWarning",
-    "ValueError",
-    "Warning",
-    "ZeroDivisionError",
-]
-
 
 class ExceptionFactory(object):
     '''
@@ -59,26 +7,25 @@ class ExceptionFactory(object):
     Built-in exception names are reserved.
     '''
     def __init__(self):
-        self._exceptions = {}
+        self.classes = {}
 
-    def _build_exception(self, name):
-        self._exceptions[name] = type(name, (Exception,), {})
-        return self._exceptions[name]
+    def build_exception_class(self, name):
+        self.classes[name] = type(name, (Exception,), {})
+        return self.classes[name]
 
-    def exception_cls(self, name):
-        if name not in BUILTIN_EXCEPTIONS:
-            cls = self._exceptions.get(name, None)
-            if not cls:
-                cls = self._build_exception(name)
-        else:
-            cls = getattr(builtins, name, None)
-            # maybe the exception class was deleted? Who knows
-            if cls is None:
-                raise NameError("global name '{}' is not defined".format(name))
+    def get_class(self, name):
+        # Check builtins for real exception class
+        cls = getattr(builtins, name, None)
+        # Cached?
+        if not cls:
+            cls = self.classes.get(name, None)
+        # Cache
+        if not cls:
+            cls = self.build_exception_class(name)
         return cls
 
     def exception(self, name, *args):
-        return self.exception_cls(name)(*args)
+        return self.get_class(name)(*args)
 
 
 class ExceptionContainer(object):
@@ -95,7 +42,7 @@ class ExceptionContainer(object):
             print e.args
     '''
     def __init__(self):
-        self._factory = ExceptionFactory()
+        self.factory = ExceptionFactory()
 
     def __getattr__(self, name):
-        return self._factory.exception_cls(name)
+        return self.factory.get_class(name)
