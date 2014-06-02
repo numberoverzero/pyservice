@@ -6,7 +6,7 @@ from .common import (
     DEFAULT_CONFIG,
     scrub_output,
     Extensions,
-    ExceptionContainer
+    ExceptionFactory
 )
 from .docstrings import docstring
 logger = logging.getLogger(__name__)
@@ -18,7 +18,7 @@ class Client(object):
         self.config = dict(DEFAULT_CONFIG)
         self.config.update(config)
         self.operations = {}
-        self.exceptions = ExceptionContainer()
+        self.exceptions = ExceptionFactory()
 
         self.extensions = Extensions(  # Add __handle after all extensions
             lambda: self.extensions.append(self.__handle))

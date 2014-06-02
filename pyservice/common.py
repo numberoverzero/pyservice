@@ -77,25 +77,8 @@ class ExceptionFactory(object):
     def exception(self, name, *args):
         return self.get_class(name)(*args)
 
-
-class ExceptionContainer(object):
-    '''
-    Usage:
-        exceptions = ExceptionContainer()
-        assert KeyError is exceptions.KeyError
-
-        try:
-            ...
-        except exceptions.KeyError as e:
-            print e.args
-        except exceptions.SomeException as e:
-            print e.args
-    '''
-    def __init__(self):
-        self.factory = ExceptionFactory()
-
     def __getattr__(self, name):
-        return self.factory.get_class(name)
+        return self.get_class(name)
 
 
 class Extensions(object):
