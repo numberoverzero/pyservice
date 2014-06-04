@@ -4,7 +4,7 @@ import builtins
 import functools
 from .docstrings import docstring
 
-__noop = lambda *a, **kw: None
+noop = lambda *a, **kw: None
 DEFAULT_CONFIG = {
     "protocol": "json",
     "timeout": 2,
@@ -20,7 +20,7 @@ class Chain(object):
         self.__call_partial = None
 
     def __compile(self, method):
-        _next = __noop
+        _next = noop
         for obj in reversed(self.__objs):
             func = getattr(obj, method, None)
             if func:
@@ -76,7 +76,7 @@ class Extensions(object):
     def __init__(self, on_finalize=None):
         self.extensions = []
         self.finalized = False
-        self.on_finalize = on_finalize or __noop
+        self.on_finalize = on_finalize or noop
 
     def finalize(self):
         if self.finalized:

@@ -129,7 +129,7 @@ def operation(task_id):
 # See the readme section on client/service extensions.
 """
 
-docstring_extension = """#Creates an Extension that only overrides the
+docstring_Extension = """#Creates an Extension that only overrides the
 # handle_operation function.  use the 'yield' keyword to indicate where the
 # rest of the operation handler chain should be invoked.  Optionally yield an
 # (operation, context) tuple or use a raw `yield` to pass the input operation
@@ -182,7 +182,7 @@ def ProtectVirus(operation, context):
 docs = {
     'Client': docstring_Client,
     'Service': docstring_Service,
-    'extension': docstring_extension
+    'Extension': docstring_Extension
 }
 
 
