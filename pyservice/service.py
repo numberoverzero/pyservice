@@ -5,7 +5,8 @@ from .serialize import serializers
 from .common import (
     DEFAULT_CONFIG,
     Extensions,
-    ExceptionFactory
+    ExceptionFactory,
+    load_operations
 )
 from .docstrings import docstring
 logger = logging.getLogger(__name__)
@@ -13,19 +14,21 @@ logger = logging.getLogger(__name__)
 
 @docstring
 class Service(object):
-    def __init__(self, description, **config):
+    def __init__(self, service, **config):
         self.config = dict(DEFAULT_CONFIG)
         self.config.update(config)
 
         self.exceptions = ExceptionFactory()
-        self.description = description
         self.extensions = Extensions(  # Add __handle after all extensions
             lambda: self.extensions.append(self.__handle))
-        self.functions = {}
+
+        for key, value in service.items():
+            setattr(self, key, value)
+        self.operations = load_operations(service.get("operations", {}))
 
         # Building a bottle routing format
         # https://mysite.com/api/{protocol}/{version}/{operation}
-        self.uri = self.description.endpoint["path"].format(
+        self.uri = self.endpoint["path"].format(
             protocol="<protocol>",
             version="<version>",
             operation="<operation>"
@@ -46,10 +49,10 @@ class Service(object):
         if func is None:
             return lambda func: self.operation(name=name, func=func)
 
-        if name not in self.description.operations:
+        if name not in self.operations:
             raise ValueError("Unknown operation: " + name)
 
-        self.functions[name] = func
+        self.operations[name].func = func
         return func
 
     def __call__(self, protocol, version, operation):
@@ -62,22 +65,22 @@ class Service(object):
             logger.info(msg)
             bottle.abort(400, msg)
 
-        if version != self.description.version:
+        if version != self.version:
             msg = "Unsupported version {}".format(version)
             logger.info(msg)
             bottle.abort(400, msg)
 
-        if operation not in self.description.operations:
+        if operation not in self.operations:
             msg = "Unsupported operation {}".format(operation)
             logger.info(msg)
             bottle.abort(404, msg)
 
+        operation = self.operations[operation]
         context = {
             "exception": {},
 
             # Meta
             "operation": operation,
-            "description": self.description,
             "service": self
         }
 
@@ -125,8 +128,7 @@ class Service(object):
             event=event, context=context))
         if event == "operation":
             try:
-                func = self.functions[operation]
-                func(context["request"], context["response"])
+                operation.func(context["request"], context["response"])
                 next_handler(event, operation, context)
             except Exception as exception:
                 self.raise_exception(operation, exception, context)
@@ -138,7 +140,7 @@ class Service(object):
         cls = exception.__class__.__name__
         args = exception.args
 
-        whitelisted = cls in self.description.operations[operation].exceptions
+        whitelisted = cls in operation.exceptions
         debugging = self.config.get("debug", False)
         logger.debug("raise_exception(whitelist={w}, debugging={d})".format(
             w=whitelisted, d=debugging))

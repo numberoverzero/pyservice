@@ -12,8 +12,40 @@ DEFAULT_CONFIG = {
 }
 
 
-class Chain(object):
+class Field(object):
+    def __init__(self, name, data):
+        for key, value in data.items():
+            setattr(self, key, value)
+        self.name = name
 
+
+class Operation(object):
+    def __init__(self, name, data):
+        for key, value in data.items():
+            setattr(self, key, value)
+
+        self.name = data.get("name", name)
+        self.func = noop
+
+        def load_field(field):
+            value = data.get(field, {})
+            value = [Field(*item) for item in value.items()]
+            value = {i.name: i for i in value}
+            setattr(self, field, value)
+
+        for field in ["input", "output", "exceptions"]:
+            load_field(field)
+
+    def __call__(self, *args, **kwargs):
+        self.func(*args, **kwargs)
+
+
+def load_operations(data):
+    operations = [Operation(*item) for item in data.items()]
+    return {operation.name: operation for operation in operations}
+
+
+class Chain(object):
     def __init__(self, objs):
         # Private to avoid clashes when we setattr after compiling
         self.__objs = objs
@@ -72,7 +104,6 @@ class ExceptionFactory(object):
 
 
 class Extensions(object):
-
     def __init__(self, on_finalize=None):
         self.extensions = []
         self.finalized = False
