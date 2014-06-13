@@ -12,6 +12,17 @@ DEFAULT_CONFIG = {
 }
 
 
+class CacheDescriptor(object):
+    def __init__(self, func):
+        self.func = func
+
+    def __get__(self, obj, cls):
+        value = self.func(obj)
+        setattr(obj, self.func.__name__, value)
+        return value
+cache = CacheDescriptor
+
+
 class Field(object):
     def __init__(self, name, data):
         for key, value in data.items():
@@ -109,12 +120,14 @@ class Extensions(object):
         self.finalized = False
         self.on_finalize = on_finalize or noop
 
-    def finalize(self):
-        if self.finalized:
-            return
-        self.on_finalize()
+    @cache
+    def chain(self):
         self.finalized = True
-        self.chain = Chain(self.extensions)
+        self.on_finalize()
+        return Chain(self.extensions)
+
+    def finalize(self):
+        self.chain
 
     def append(self, extension):
         if self.finalized:
@@ -123,8 +136,6 @@ class Extensions(object):
             self.extensions.append(extension)
 
     def __call__(self, event, *args, **kwargs):
-        if not self.finalized:
-            self.finalize()
         return self.chain(event, *args, **kwargs)
 
 
