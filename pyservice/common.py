@@ -122,8 +122,8 @@ class Extensions(object):
 
     @cache
     def chain(self):
-        self.finalized = True
         self.on_finalize()
+        self.finalized = True
         return Chain(self.extensions)
 
     def finalize(self):
