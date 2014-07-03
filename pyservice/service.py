@@ -1,14 +1,15 @@
-import bottle
 import functools
 import logging
 from .serialize import serializers
 from .common import (
+    cache,
     DEFAULT_CONFIG,
     Extensions,
     ExceptionFactory,
     load_operations
 )
 from .docstrings import docstring
+from .wsgi_app import WSGIApplication
 logger = logging.getLogger(__name__)
 
 
@@ -19,31 +20,41 @@ class Service(object):
         self.config.update(config)
 
         self.exceptions = ExceptionFactory()
-        self.extensions = Extensions(  # Add __handle after all extensions
-            lambda: self.extensions.append(self.__handle))
+        self.extensions = Extensions()
 
         for key, value in service.items():
             setattr(self, key, value)
         self.operations = load_operations(service.get("operations", {}))
 
-        # Building a bottle routing format
-        # https://mysite.com/api/{protocol}/{version}/{operation}
-        self.uri = self.endpoint["path"].format(
-            protocol="<protocol>",
-            version="<version>",
-            operation="<operation>"
-        )
-        logger.info("Service uri is {}".format(self.uri))
+        if self.debugging:
+            logger.info("Service uri is {}".format(self.endpoint["path"]))
 
-        self.app = bottle.Bottle()
-        self.app.post(self.uri)(self)
+        self.app = WSGIApplication(self, self.endpoint["path"])
         self.serializer = serializers[self.config["protocol"]]
 
-    def run(self, *args, **config):
+    @cache
+    def debugging(self):
+        return self.config.get("debug", False)
+
+    def run(self, wsgi_server, *args, **config):
+        '''
+        wsgi_server must have a .run(app, **kwargs) method which takes
+        a WSGI application as its argument, and optional configuration.
+
+        See http://legacy.python.org/dev/peps/pep-0333/ for WSGI specification
+        and https://github.com/defnull/bottle/blob/master/bottle.py#L2606 for
+        examples of various adapters for many frameworks, including
+        CherryPy, Waitress, Paste, Tornado, AppEngine, Twisted, GEvent,
+        Gunicorn, and many more.  These can all be dropped in for wsgi_server.
+        '''
+        # Add __handle after all extensions
+        self.extensions.append(self.handle)
         # Snapshot the set of extensions when the service starts
         self.extensions.finalize()
         self.config.update(config)
-        self.app.run(*args, **self.config)
+
+        # self.app.run(*args, **self.config)
+        self.app.run(wsgi_server, **self.config)
 
     def operation(self, *, name, func=None):
         if func is None:
@@ -55,32 +66,35 @@ class Service(object):
         self.operations[name].func = func
         return func
 
-    def __call__(self, protocol, version, operation):
-        '''Entry point from bottle'''
-        logger.info("call(protocol={p}, version={v}, operation={o})".format(
-            o=operation, p=protocol, v=version))
-
+    def validate_params(self, protocol, version, operation):
         if protocol != self.config["protocol"]:
             msg = "Unsupported protocol {}".format(protocol)
-            logger.info(msg)
-            bottle.abort(400, msg)
-
+            if self.debugging:
+                logger.info(msg)
+            self.app.abort(400, msg)
         if version != self.version:
             msg = "Unsupported version {}".format(version)
-            logger.info(msg)
-            bottle.abort(400, msg)
-
+            if self.debugging:
+                logger.info(msg)
+            self.app.abort(400, msg)
         if operation not in self.operations:
             msg = "Unsupported operation {}".format(operation)
-            logger.info(msg)
-            bottle.abort(404, msg)
+            if self.debugging:
+                logger.info(msg)
+            self.app.abort(404, msg)
+
+    def __call__(self, *, protocol, version, operation, wire_in):
+        '''Entry point from self.app'''
+        self.validate_params(protocol, version, operation)
+        if self.debugging:
+            logger.info(
+                "call(protocol={p}, version={v}, operation={o})".format(
+                    o=operation, p=protocol, v=version))
 
         operation = self.operations[operation]
         context = {
-            "exception": {},
-
-            # Meta
             "operation": operation,
+            "exception": {},
             "service": self
         }
 
@@ -88,7 +102,6 @@ class Service(object):
             self.extensions("before_operation", operation, context)
 
             # Read request
-            wire_in = bottle.request.body.read().decode("utf-8")
             request = self.serializer.deserialize(wire_in)
 
             # before/after don't have acces to request/response
@@ -96,12 +109,6 @@ class Service(object):
             context["response"] = {}
 
             self.extensions("operation", operation, context)
-
-            # Note that copy/sanitize happens before the after handlers.
-            # This is so that the response can safely access
-            # extension-dependent values, such as objects from a sqlalchemy
-            # session.  Once the response is serialized, the after hook can
-            # do whatever it wants.
 
             # Serialize before the after handlers.  This allows extension-
             # dependent values, such as objects from a sqlalchemy session to be
@@ -118,14 +125,16 @@ class Service(object):
             return wire_out
         except Exception as exception:
             msg = "Exception during operation {}".format(operation)
-            logger.exception(msg, exc_info=exception)
-            bottle.abort(500, "Internal Error")
+            if self.debugging:
+                logger.exception(msg, exc_info=exception)
+            self.app.abort(500, "Internal Error")
         finally:
             self.extensions("after_operation", operation, context)
 
-    def __handle(self, next_handler, event, operation, context):
-        logger.debug("handle(event={event}, context={context})".format(
-            event=event, context=context))
+    def handle(self, next_handler, event, operation, context):
+        if self.debugging:
+            logger.debug("handle(event={event}, context={context})".format(
+                event=event, context=context))
         if event == "operation":
             try:
                 operation.func(context["request"], context["response"])
@@ -141,10 +150,10 @@ class Service(object):
         args = exception.args
 
         whitelisted = cls in operation.exceptions
-        debugging = self.config.get("debug", False)
-        logger.debug("raise_exception(whitelist={w}, debugging={d})".format(
-            w=whitelisted, d=debugging))
-        if not (whitelisted or debugging):
+        if self.debugging:
+            logger.debug(
+                "raise_exception(whitelist={w})".format(w=whitelisted))
+        if not (whitelisted or self.debugging):
             cls = "ServiceException"
             args = ["Internal Error"]
 
