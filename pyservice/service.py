@@ -26,9 +26,6 @@ class Service(object):
             setattr(self, key, value)
         self.operations = load_operations(service.get("operations", {}))
 
-        if self.debugging:
-            logger.info("Service uri is {}".format(self.endpoint["path"]))
-
         self.app = WSGIApplication(self, self.endpoint["path"])
         self.serializer = serializers[self.config["protocol"]]
 
@@ -54,6 +51,8 @@ class Service(object):
         self.config.update(config)
 
         # self.app.run(*args, **self.config)
+        if self.debugging:
+            logger.info("Service uri is {}".format(self.endpoint["path"]))
         self.app.run(wsgi_server, **self.config)
 
     def operation(self, *, name, func=None):
@@ -102,7 +101,8 @@ class Service(object):
             self.extensions("before_operation", operation, context)
 
             # Read request
-            request = self.serializer.deserialize(wire_in)
+            request = self.serializer.deserialize(
+                wire_in, debug=self.debugging)
 
             # before/after don't have acces to request/response
             context["request"] = request.get("request", {})
@@ -116,7 +116,7 @@ class Service(object):
             wire_out = self.serializer.serialize({
                 "response": context.get("response", {}),
                 "exception": context.get("exception", {})
-            })
+            }, debug=self.debugging)
 
             # before/after don't have acces to request/response
             del context["request"]

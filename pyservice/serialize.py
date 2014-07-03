@@ -14,12 +14,14 @@ string = serializers[format]['serialize'](dict)
 
 
 class JsonSerializer(object):
-    def serialize(self, data):
-        logger.debug("serialize {}".format(data))
+    def serialize(self, data, *, debug=False):
+        if debug:
+            logger.debug("serialize {}".format(data))
         return json.dumps(data)
 
     def deserialize(self, string):
-        logger.debug("deserialize {}".format(string))
+        if debug:
+            logger.debug("deserialize {}".format(string))
         return json.loads(string)
 
 
