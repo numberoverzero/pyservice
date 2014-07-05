@@ -17,22 +17,41 @@ def build_pattern(string):
     return re.compile("^" + string.format(**matchers) + "/?$")
 
 
-class Request(object):
-    def __init__(self, environ):
-        self.path = path(environ)
-        self.body = body(environ)
-
-
 class Response(object):
     import http.client
     HTTP_CODES = dict(
         (k, "{} {}".format(k, v)) for (k, v) in http.client.responses.items())
+    INTERNAL_ERROR = RequestException(500, "Internal Error")
 
     def __init__(self):
         self.status = 200
         self.headers = {}
-        self.body = ''
         self.charset = 'UTF-8'
+        self.body = ''
+
+    @property
+    def body(self):
+        '''Body as string'''
+        return self._body[0].decode(self.charset)
+
+    @body.setter
+    def body(self, value):
+        '''Must be a unicode string'''
+
+        if not isinstance(value, str):
+            raise Response.INTERNAL_ERROR
+
+        # Unicode -> bytes
+        value = value.encode(self.charset)
+        self.headers['Content-Length'] = len(value)
+
+        # WSGI spec needs iterable of bytes
+        self._body = [value]
+
+    @property
+    def body_raw(self):
+        '''Body as formatted for return from wsgi app'''
+        return self._body
 
     @property
     def headers_list(self):
@@ -65,32 +84,16 @@ class WSGIApplication(object):
     def __call__(self, environ, start_response):
         """WSGI-interface."""
         try:
-            request = Request(environ)
             response = Response()
-
-            kwargs = self.get_route_kwargs(request.path)
-            kwargs["wire_in"] = request.body
+            kwargs = self.get_route_kwargs(path(environ))
+            kwargs["wire_in"] = body(environ)
             response.body = self.service(**kwargs)
         except RequestException as exception:
             logger.debug(
                 "RequestException during WSGIApplication call",
                 exc_info=exception)
             response.status = exception.status
-            response.body = exception.body
-
-        # Empty output
-        if not response.body:
-            response.headers['Content-Length'] = 0
-            response.body = ''
-
-        # Unicode strings
-        if isinstance(response.body, str):
-            response.body = response.body.encode(response.charset)
-
-        # Byte strings
-        if isinstance(response.body, bytes):
-            response.headers['Content-Length'] = len(response.body)
-            response.body = [response.body]
+            response.body = exception.msg
 
         start_response(response.status_line, response.headers_list)
-        return response.body
+        return response.body_raw

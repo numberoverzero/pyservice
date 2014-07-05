@@ -3,6 +3,7 @@ import functools
 import logging
 from .serialize import serializers
 from .common import (
+    cache,
     DEFAULT_CONFIG,
     Extensions,
     ExceptionFactory
@@ -19,7 +20,8 @@ class Client(object):
         self.operations = {}
         self.exceptions = ExceptionFactory()
 
-        self.extensions = Extensions(  # Add __handle after all extensions
+        # Add __handle after all extensions
+        self.extensions = Extensions(
             lambda: self.extensions.append(self.__handle))
         self.__description = description
         self.__serializer = serializers[self.config["protocol"]]
@@ -38,9 +40,14 @@ class Client(object):
             self.operations[operation] = func
             setattr(self, operation, func)
 
+    @cache
+    def debugging(self):
+        return self.config.get("debug", False)
+
     def __call__(self, operation, **request):
-        logger.info("call(operation={o}, request={r})".format(
-            o=operation, r=request))
+        if self.debugging:
+            logger.info("call(operation={o}, request={r})".format(
+                o=operation, r=request))
         context = {
             "exception": {},
 
@@ -71,8 +78,9 @@ class Client(object):
             self.extensions("after_operation", operation, context)
 
     def __handle(self, next_handler, event, operation, context):
-        logger.debug("handle(event={event}, context={context})".format(
-            event=event, context=context))
+        if self.debugging:
+            logger.debug("handle(event={event}, context={context})".format(
+                event=event, context=context))
         if event == "operation":
             try:
                 wire_out = self.__serializer.serialize(
@@ -86,7 +94,8 @@ class Client(object):
                     context[key].update(r.get(key, {}))
             except Exception as exception:
                 msg = "Exception during operation {}".format(operation)
-                logger.exception(msg, exc_info=exception)
+                if self.debugging:
+                    logger.exception(msg, exc_info=exception)
                 raise
 
             if context["exception"]:
@@ -112,11 +121,11 @@ class Client(object):
 
         exceptions = self.__description.operations[operation].exceptions
         whitelisted = name in exceptions
-        debugging = self.config.get("debug", False)
-        logger.debug("raise_exception(whitelist={w}, debugging={d})".format(
-            w=whitelisted, d=debugging))
+        if self.debugging:
+            logger.debug("raise_exception(whitelist={w})".format(
+                w=whitelisted))
 
-        if not (whitelisted or debugging):
+        if not (whitelisted or self.debugging):
             # Not debugging and not an expected exception,
             # wrap so it doesn't bubble up
             wrap = self.exceptions.ServiceException

@@ -19,7 +19,7 @@ class JsonSerializer(object):
             logger.debug("serialize {}".format(data))
         return json.dumps(data)
 
-    def deserialize(self, string):
+    def deserialize(self, string, *, debug=False):
         if debug:
             logger.debug("deserialize {}".format(string))
         return json.loads(string)

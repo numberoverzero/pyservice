@@ -47,7 +47,7 @@ class RequestException(Exception):
 MEMFILE_MAX = 102400
 REQUEST_TOO_LARGE = RequestException(413, 'Request too large')
 BAD_CHUNKED_BODY = RequestException(
-    400, 'Error while parsing chunked transfer body.')
+    400, 'Error while parsing chunked transfer body')
 
 
 def path(environ):

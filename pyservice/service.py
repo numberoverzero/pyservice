@@ -50,9 +50,7 @@ class Service(object):
         self.extensions.finalize()
         self.config.update(config)
 
-        # self.app.run(*args, **self.config)
-        if self.debugging:
-            logger.info("Service uri is {}".format(self.endpoint["path"]))
+        logger.info("Service uri is {}".format(self.endpoint["path"]))
         self.app.run(wsgi_server, **self.config)
 
     def operation(self, *, name, func=None):
