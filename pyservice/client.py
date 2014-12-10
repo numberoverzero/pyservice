@@ -8,11 +8,9 @@ from .common import (
     Extensions,
     ExceptionFactory
 )
-from .docstrings import docstring
 logger = logging.getLogger(__name__)
 
 
-@docstring
 class Client(object):
     def __init__(self, description, **config):
         self.config = dict(DEFAULT_CONFIG)

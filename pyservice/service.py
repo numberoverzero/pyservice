@@ -1,4 +1,3 @@
-import functools
 import logging
 from .serialize import serializers
 from .common import (
@@ -8,12 +7,10 @@ from .common import (
     ExceptionFactory,
     load_operations
 )
-from .docstrings import docstring
 from .wsgi_app import WSGIApplication
 logger = logging.getLogger(__name__)
 
 
-@docstring
 class Service(object):
     def __init__(self, service, **config):
         self.config = dict(DEFAULT_CONFIG)

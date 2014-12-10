@@ -2,7 +2,6 @@ import sys
 import types
 import builtins
 import functools
-from .docstrings import docstring
 
 noop = lambda *a, **kw: None
 DEFAULT_CONFIG = {
@@ -139,7 +138,6 @@ class Extensions(object):
         return self.chain(event, *args, **kwargs)
 
 
-@docstring
 def Extension(func):
     doc = "Generated extension from function '{}':\n\n{}".format(
         func.__name__, func.__doc__)
