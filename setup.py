@@ -24,7 +24,7 @@ setup(
     url='http://github.com/numberoverzero/pyservice/',
     license='MIT',
     author='Joe Cross',
-    install_requires=['bottle', 'requests'],
+    install_requires=['requests', 'ujson'],
     author_email='joe.mcross@gmail.com',
     description='web services with python made easy',
     long_description=long_description,

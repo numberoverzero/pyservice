@@ -1,6 +1,6 @@
-import wsgi
 import logging
-from .serialize import serializers
+import ujson
+import wsgi
 from .common import (
     cache,
     DEFAULT_CONFIG,
@@ -22,8 +22,6 @@ class Service(object):
         for key, value in service.items():
             setattr(self, key, value)
         self.operations = load_operations(service.get("operations", {}))
-
-        self.serializer = serializers[self.config["protocol"]]
 
     @cache
     def debugging(self):
@@ -51,19 +49,17 @@ class Service(object):
         wsgi_server.run(wsgi_app, **self.config)
 
     def operation(self, *, name, func=None):
-        if func is None:
-            return lambda func: self.operation(name=name, func=func)
-
         if name not in self.operations:
             raise ValueError("Unknown operation: " + name)
+
+        # Return decorator that takes function
+        if func is None:
+            return lambda func: self.operation(name=name, func=func)
 
         self.operations[name].func = func
         return func
 
-    def validate_params(self, protocol, version, operation):
-        if protocol != self.config["protocol"]:
-            msg = "Unsupported protocol {}".format(protocol)
-            wsgi.abort(400, msg)
+    def validate_params(self, version, operation):
         if version != self.version:
             msg = "Unsupported version {}".format(version)
             wsgi.abort(400, msg)
@@ -71,9 +67,9 @@ class Service(object):
             msg = "Unsupported operation {}".format(operation)
             wsgi.abort(404, msg)
 
-    def __call__(self, *, protocol, version, operation, wire_in):
+    def __call__(self, *, version, operation, wire_in):
         '''WSGI Application entry point'''
-        self.validate_params(protocol, version, operation)
+        self.validate_params(version, operation)
         operation = self.operations[operation]
         context = {
             "operation": operation,
@@ -85,8 +81,7 @@ class Service(object):
             self.extensions("before_operation", operation, context)
 
             # Read request
-            request = self.serializer.deserialize(
-                wire_in)
+            request = ujson.loads(wire_in)
 
             # before/after don't have acces to request/response
             context["request"] = request.get("request", {})
@@ -97,7 +92,7 @@ class Service(object):
             # Serialize before the after handlers.  This allows extension-
             # dependent values, such as objects from a sqlalchemy session to be
             # serialized before the session is closed.
-            wire_out = self.serializer.serialize({
+            wire_out = ujson.dumps({
                 "response": context.get("response", {}),
                 "exception": context.get("exception", {})
             })

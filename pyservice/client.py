@@ -1,7 +1,7 @@
-import requests
-import functools
 import logging
-from .serialize import serializers
+import functools
+import requests
+import ujson
 from .common import (
     cache,
     DEFAULT_CONFIG,
@@ -22,7 +22,6 @@ class Client(object):
         self.extensions = Extensions(
             lambda: self.extensions.append(self.__handle))
         self.__description = description
-        self.__serializer = serializers[self.config["protocol"]]
 
         uri = "{scheme}://{host}:{port}{path}".format(
             **self.__description.endpoint)
@@ -81,13 +80,13 @@ class Client(object):
                 event=event, context=context))
         if event == "operation":
             try:
-                wire_out = self.__serializer.serialize(
+                wire_out = ujson.dumps(
                     {"request": context["request"]})
                 wire_in = requests.post(
                     self.uri.format(operation=operation),
                     data=wire_out, timeout=self.config["timeout"])
                 wire_in.raise_for_status()
-                r = self.__serializer.deserialize(wire_in.text)
+                r = ujson.loads(wire_in.text)
                 for key in ["response", "exception"]:
                     context[key].update(r.get(key, {}))
             except Exception as exception:
