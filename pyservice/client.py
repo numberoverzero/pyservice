@@ -26,7 +26,6 @@ class Client(object):
         uri = "{scheme}://{host}:{port}{path}".format(
             **self.__description.endpoint)
         self.uri = uri.format(
-            protocol=self.config["protocol"],
             version=self.__description.version,
             operation="{operation}")
         logger.info("Service uri is {}".format(self.uri))

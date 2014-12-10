@@ -5,7 +5,6 @@ import functools
 
 noop = lambda *a, **kw: None
 DEFAULT_CONFIG = {
-    "protocol": "json",
     "timeout": 2,
     "strict": True
 }
