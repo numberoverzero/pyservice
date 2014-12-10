@@ -1,0 +1,7 @@
+language: python
+env:
+  - TOXENV=py34
+install: pip install tox coveralls
+script: tox -e $TOXENV
+after_success:
+  - coveralls --rcfile=setup.cfg
