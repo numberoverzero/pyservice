@@ -63,28 +63,17 @@ class Service(object):
     def validate_params(self, protocol, version, operation):
         if protocol != self.config["protocol"]:
             msg = "Unsupported protocol {}".format(protocol)
-            if self.debugging:
-                logger.info(msg)
             wsgi.abort(400, msg)
         if version != self.version:
             msg = "Unsupported version {}".format(version)
-            if self.debugging:
-                logger.info(msg)
             wsgi.abort(400, msg)
         if operation not in self.operations:
             msg = "Unsupported operation {}".format(operation)
-            if self.debugging:
-                logger.info(msg)
             wsgi.abort(404, msg)
 
     def __call__(self, *, protocol, version, operation, wire_in):
         '''WSGI Application entry point'''
         self.validate_params(protocol, version, operation)
-        if self.debugging:
-            logger.info(
-                "call(protocol={p}, version={v}, operation={o})".format(
-                    o=operation, p=protocol, v=version))
-
         operation = self.operations[operation]
         context = {
             "operation": operation,
@@ -97,7 +86,7 @@ class Service(object):
 
             # Read request
             request = self.serializer.deserialize(
-                wire_in, debug=self.debugging)
+                wire_in)
 
             # before/after don't have acces to request/response
             context["request"] = request.get("request", {})
@@ -111,7 +100,7 @@ class Service(object):
             wire_out = self.serializer.serialize({
                 "response": context.get("response", {}),
                 "exception": context.get("exception", {})
-            }, debug=self.debugging)
+            })
 
             # before/after don't have acces to request/response
             del context["request"]
@@ -120,16 +109,12 @@ class Service(object):
             return wire_out
         except Exception as exception:
             msg = "Exception during operation {}".format(operation)
-            if self.debugging:
-                logger.exception(msg, exc_info=exception)
-            wsgi.abort(500, "Internal Error")
+            logger.exception(msg, exc_info=exception)
+            wsgi.abort(wsgi.INTERNAL_ERROR)
         finally:
             self.extensions("after_operation", operation, context)
 
     def handle(self, next_handler, event, operation, context):
-        if self.debugging:
-            logger.debug("handle(event={event}, context={context})".format(
-                event=event, context=context))
         if event == "operation":
             try:
                 operation.func(context["request"], context["response"])
@@ -145,9 +130,6 @@ class Service(object):
         args = exception.args
 
         whitelisted = cls in operation.exceptions
-        if self.debugging:
-            logger.debug(
-                "raise_exception(whitelist={w})".format(w=whitelisted))
         if not (whitelisted or self.debugging):
             cls = "ServiceException"
             args = ["Internal Error"]
