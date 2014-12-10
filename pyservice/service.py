@@ -42,11 +42,12 @@ class Service(object):
         self.extensions.append(self.handle)
         # Snapshot the set of extensions when the service starts
         self.extensions.finalize()
-        self.config.update(config)
+        run_config = self.config.copy()
+        run_config.update(config)
 
         logger.info("Service uri is {}".format(self.endpoint["path"]))
         wsgi_app = wsgi.WSGIApplication(self, self.endpoint["path"])
-        wsgi_server.run(wsgi_app, **self.config)
+        wsgi_server.run(wsgi_app, **run_config)
 
     def operation(self, *, name, func=None):
         if name not in self.operations:

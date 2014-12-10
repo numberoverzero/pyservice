@@ -1,4 +1,4 @@
-import json
+import ujson
 
 
 def build_field(obj, field, cls):
@@ -25,7 +25,7 @@ class Description(object):
 
     @classmethod
     def from_string(cls, string):
-        data = json.loads(string.replace('\n', ''))
+        data = ujson.loads(string.replace('\n', ''))
         return cls.from_json(data)
 
     @classmethod

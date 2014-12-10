@@ -35,7 +35,11 @@ class RequestException(Exception):
         self.msg = msg
 
 
-def abort(status, msg):
+def abort(status=500, msg="Internal Error"):
+    # Allows things like abort(INTERNAL_ERROR)
+    if isinstance(status, RequestException):
+        raise status
+    # Create exception and raise
     raise RequestException(status, msg)
 
 
@@ -105,7 +109,7 @@ class WSGIApplication(object):
     def get_route_kwargs(self, path):
         r = self.pattern.search(path)
         if not r:
-            raise UNKNOWN_OPERATION
+            abort(UNKNOWN_OPERATION)
         return r.groupdict()
 
     def __call__(self, environ, start_response):
@@ -157,12 +161,12 @@ def chunked_body(environ):
 def body(environ):
     clen = content_length(environ)
     if clen > MEMFILE_MAX:
-        raise REQUEST_TOO_LARGE
+        abort(REQUEST_TOO_LARGE)
     if clen < 0:
         clen = MEMFILE_MAX + 1
     data = _body(environ).read(clen)
     if len(data) > MEMFILE_MAX:
-        raise REQUEST_TOO_LARGE
+        abort(REQUEST_TOO_LARGE)
     return data.decode("UTF-8")
 
 
@@ -207,14 +211,14 @@ def _iter_chunked(read, bufsize, environ):
             c = read(1)
             header += c
             if not c:
-                raise BAD_CHUNKED_BODY
+                abort(BAD_CHUNKED_BODY)
             if len(header) > bufsize:
-                raise BAD_CHUNKED_BODY
+                abort(BAD_CHUNKED_BODY)
         size, _, _ = header.partition(sem)
         try:
             maxread = int(size.strip(), 16)
         except ValueError:
-            raise BAD_CHUNKED_BODY
+            abort(BAD_CHUNKED_BODY)
         if maxread == 0:
             break
         buff = bs
@@ -223,8 +227,8 @@ def _iter_chunked(read, bufsize, environ):
                 buff = read(min(maxread, bufsize))
             part, buff = buff[:maxread], buff[maxread:]
             if not part:
-                raise BAD_CHUNKED_BODY
+                abort(BAD_CHUNKED_BODY)
             yield part
             maxread -= len(part)
         if read(2) != rn:
-            raise BAD_CHUNKED_BODY
+            abort(BAD_CHUNKED_BODY)
