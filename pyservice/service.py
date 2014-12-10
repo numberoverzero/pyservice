@@ -1,3 +1,4 @@
+import wsgi
 import logging
 from .serialize import serializers
 from .common import (
@@ -7,7 +8,6 @@ from .common import (
     ExceptionFactory,
     load_operations
 )
-from .wsgi_app import WSGIApplication
 logger = logging.getLogger(__name__)
 
 
@@ -23,7 +23,6 @@ class Service(object):
             setattr(self, key, value)
         self.operations = load_operations(service.get("operations", {}))
 
-        self.app = WSGIApplication(self, self.endpoint["path"])
         self.serializer = serializers[self.config["protocol"]]
 
     @cache
@@ -36,7 +35,7 @@ class Service(object):
         a WSGI application as its argument, and optional configuration.
 
         See http://legacy.python.org/dev/peps/pep-0333/ for WSGI specification
-        and https://github.com/defnull/bottle/blob/master/bottle.py#L2606 for
+        and https://github.com/bottlepy/bottle/blob/master/bottle.py#L2618 for
         examples of various adapters for many frameworks, including
         CherryPy, Waitress, Paste, Tornado, AppEngine, Twisted, GEvent,
         Gunicorn, and many more.  These can all be dropped in for wsgi_server.
@@ -48,7 +47,8 @@ class Service(object):
         self.config.update(config)
 
         logger.info("Service uri is {}".format(self.endpoint["path"]))
-        self.app.run(wsgi_server, **self.config)
+        wsgi_app = wsgi.WSGIApplication(self, self.endpoint["path"])
+        wsgi_server.run(wsgi_app, **self.config)
 
     def operation(self, *, name, func=None):
         if func is None:
@@ -65,20 +65,20 @@ class Service(object):
             msg = "Unsupported protocol {}".format(protocol)
             if self.debugging:
                 logger.info(msg)
-            self.app.abort(400, msg)
+            wsgi.abort(400, msg)
         if version != self.version:
             msg = "Unsupported version {}".format(version)
             if self.debugging:
                 logger.info(msg)
-            self.app.abort(400, msg)
+            wsgi.abort(400, msg)
         if operation not in self.operations:
             msg = "Unsupported operation {}".format(operation)
             if self.debugging:
                 logger.info(msg)
-            self.app.abort(404, msg)
+            wsgi.abort(404, msg)
 
     def __call__(self, *, protocol, version, operation, wire_in):
-        '''Entry point from self.app'''
+        '''WSGI Application entry point'''
         self.validate_params(protocol, version, operation)
         if self.debugging:
             logger.info(
@@ -122,7 +122,7 @@ class Service(object):
             msg = "Exception during operation {}".format(operation)
             if self.debugging:
                 logger.exception(msg, exc_info=exception)
-            self.app.abort(500, "Internal Error")
+            wsgi.abort(500, "Internal Error")
         finally:
             self.extensions("after_operation", operation, context)
 

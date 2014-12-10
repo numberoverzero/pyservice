@@ -35,6 +35,10 @@ class RequestException(Exception):
         self.msg = msg
 
 
+def abort(status, msg):
+    raise RequestException(status, msg)
+
+
 MEMFILE_MAX = 102400
 REQUEST_TOO_LARGE = RequestException(413, 'Request too large')
 BAD_CHUNKED_BODY = RequestException(
@@ -97,12 +101,6 @@ class WSGIApplication(object):
     def __init__(self, service, pattern):
         self.service = service
         self.pattern = build_pattern(pattern)
-
-    def run(self, wsgi_server, **kwargs):
-        wsgi_server.run(self, **kwargs)
-
-    def abort(self, status, msg):
-        raise RequestException(status, msg)
 
     def get_route_kwargs(self, path):
         r = self.pattern.search(path)
