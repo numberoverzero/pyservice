@@ -19,7 +19,7 @@ class Container(collections.defaultdict):
         self[name] = value
 
 
-class RequestContext(object):
+class Context(object):
     def __init__(self, service, operation):
         self.service = service
         self.operation = operation

@@ -1,31 +1,34 @@
 import logging
 import ujson
 import wsgi
-from .common import (
-    cache,
-    DEFAULT_CONFIG,
-    Extensions,
-    ExceptionFactory,
-    load_operations
-)
+from .context import Context, Container
+from .common import cache, ExceptionFactory
 logger = logging.getLogger(__name__)
 
 
 class Service(object):
-    def __init__(self, service, **config):
-        self.config = dict(DEFAULT_CONFIG)
+    def __init__(self, **config):
+        self.config = {}
         self.config.update(config)
 
+        self.plugins = {
+            "request": [],
+            "operation": []
+        }
         self.exceptions = ExceptionFactory()
-        self.extensions = Extensions()
-
-        for key, value in service.items():
-            setattr(self, key, value)
-        self.operations = load_operations(service.get("operations", {}))
 
     @cache
     def debugging(self):
         return self.config.get("debug", False)
+
+    def plugin(self, *, scope, func=None):
+        if scope not in ["request", "operation"]:
+            raise ValueError("Unknown scope {}".format(scope))
+        # Return decorator that takes function
+        if not func:
+            return lambda func: self.plugin(scope=scope, func=func)
+        self.plugins[scope].append(func)
+        return func
 
     def run(self, wsgi_server, *args, **config):
         '''
@@ -38,10 +41,6 @@ class Service(object):
         CherryPy, Waitress, Paste, Tornado, AppEngine, Twisted, GEvent,
         Gunicorn, and many more.  These can all be dropped in for wsgi_server.
         '''
-        # Add __handle after all extensions
-        self.extensions.append(self.handle)
-        # Snapshot the set of extensions when the service starts
-        self.extensions.finalize()
         run_config = self.config.copy()
         run_config.update(config)
 
@@ -49,14 +48,12 @@ class Service(object):
         wsgi_app = wsgi.WSGIApplication(self, self.endpoint["path"])
         wsgi_server.run(wsgi_app, **run_config)
 
-    def operation(self, *, name, func=None):
+    def operation(self, name, *, func=None):
         if name not in self.operations:
-            raise ValueError("Unknown operation: " + name)
-
+            raise ValueError("Unknown operation {}".format(name))
         # Return decorator that takes function
-        if func is None:
-            return lambda func: self.operation(name=name, func=func)
-
+        if not func:
+            return lambda func: self.operation(name, func=func)
         self.operations[name].func = func
         return func
 
@@ -68,21 +65,21 @@ class Service(object):
             msg = "Unsupported operation {}".format(operation)
             wsgi.abort(404, msg)
 
-    def __call__(self, *, version, operation, wire_in):
+    def execute(self, *, version, operation, body):
         '''WSGI Application entry point'''
         self.validate_params(version, operation)
         operation = self.operations[operation]
-        context = {
-            "operation": operation,
-            "exception": {},
-            "service": self
-        }
+
+
+        ctx = Context(self, operation)
+        req = Container()
+        resp = Container()
 
         try:
             self.extensions("before_operation", operation, context)
 
             # Read request
-            request = ujson.loads(wire_in)
+            request = ujson.loads(body)
 
             # before/after don't have acces to request/response
             context["request"] = request.get("request", {})

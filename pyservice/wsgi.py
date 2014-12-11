@@ -117,8 +117,8 @@ class WSGIApplication(object):
         try:
             response = Response()
             kwargs = self.get_route_kwargs(path(environ))
-            kwargs["wire_in"] = body(environ)
-            response.body = self.service(**kwargs)
+            kwargs["body"] = body(environ)
+            response.body = self.service.execute(**kwargs)
         except RequestException as exception:
             logger.debug(
                 "RequestException during WSGIApplication call",
