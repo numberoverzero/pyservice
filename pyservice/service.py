@@ -1,7 +1,6 @@
 import logging
-import ujson
 import wsgi
-from .context import Context, Container
+from .context import Processor
 from .common import cache, ExceptionFactory
 logger = logging.getLogger(__name__)
 
@@ -65,60 +64,29 @@ class Service(object):
             msg = "Unsupported operation {}".format(operation)
             wsgi.abort(404, msg)
 
-    def execute(self, *, version, operation, body):
+    def execute(self, *, version, operation, request_body):
         '''WSGI Application entry point'''
         self.validate_params(version, operation)
         operation = self.operations[operation]
-
-
-        ctx = Context(self, operation)
-        req = Container()
-        resp = Container()
+        processor = Processor(self, operation, request_body)
 
         try:
-            self.extensions("before_operation", operation, context)
-
-            # Read request
-            request = ujson.loads(body)
-
-            # before/after don't have acces to request/response
-            context["request"] = request.get("request", {})
-            context["response"] = {}
-
-            self.extensions("operation", operation, context)
-
-            # Serialize before the after handlers.  This allows extension-
-            # dependent values, such as objects from a sqlalchemy session to be
-            # serialized before the session is closed.
-            wire_out = ujson.dumps({
-                "response": context.get("response", {}),
-                "exception": context.get("exception", {})
-            })
-
-            # before/after don't have acces to request/response
-            del context["request"]
-            del context["response"]
-
-            return wire_out
+            response_body = processor.execute()
+            return response_body
         except Exception as exception:
             msg = "Exception during operation {}".format(operation)
             logger.exception(msg, exc_info=exception)
             wsgi.abort(wsgi.INTERNAL_ERROR)
+
+    def invoke(self, operation, req, resp, ctx):
+        try:
+            operation.func(req, resp, ctx)
+        except Exception as exception:
+            self.raise_exception(operation, exception, req, resp, ctx)
         finally:
-            self.extensions("after_operation", operation, context)
+            ctx.process_request()
 
-    def handle(self, next_handler, event, operation, context):
-        if event == "operation":
-            try:
-                operation.func(context["request"], context["response"])
-                next_handler(event, operation, context)
-            except Exception as exception:
-                self.raise_exception(operation, exception, context)
-        else:
-            # Pass through
-            next_handler(event, operation, context)
-
-    def raise_exception(self, operation, exception, context):
+    def raise_exception(self, operation, exception, req, resp, ctx):
         cls = exception.__class__.__name__
         args = exception.args
 
@@ -127,7 +95,7 @@ class Service(object):
             cls = "ServiceException"
             args = ["Internal Error"]
 
-        context["exception"] = {
+        resp.__exception = {
             "cls": cls,
             "args": args
         }

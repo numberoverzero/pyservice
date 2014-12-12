@@ -117,7 +117,7 @@ class WSGIApplication(object):
         try:
             response = Response()
             kwargs = self.get_route_kwargs(path(environ))
-            kwargs["body"] = body(environ)
+            kwargs["request_body"] = body(environ)
             response.body = self.service.execute(**kwargs)
         except RequestException as exception:
             logger.debug(

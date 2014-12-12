@@ -47,7 +47,10 @@ class Processor(object):
         self.state = "request"  # request -> operation -> function
 
     def execute(self):
-        self.context.process_request()
+        if self.state is None:
+            raise ValueError("Already processed request")
+        self.continue_execution()
+        return self.response_body
 
     def continue_execution(self):
         self.index += 1
@@ -69,6 +72,7 @@ class Processor(object):
             elif self.state == "operation":
                 self.service.invoke(self.operation, self.request,
                                     self.response, self.context)
+                self.state = None
         # index < n
         else:
             if self.state == "request":
