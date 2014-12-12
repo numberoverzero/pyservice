@@ -22,10 +22,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+import io
 import re
 import logging
-from io import BytesIO
-from tempfile import TemporaryFile
+import tempfile
 logger = logging.getLogger(__name__)
 
 
@@ -141,12 +141,12 @@ def _body(environ):
     body_iter = _iter_chunked if chunked else _iter_body
     read_func = environ['wsgi.input'].read
     try:
-        body, body_size, is_temp_file = BytesIO(), 0, False
+        body, body_size, is_temp_file = io.BytesIO(), 0, False
         for part in body_iter(read_func, MEMFILE_MAX, environ):
             body.write(part)
             body_size += len(part)
             if not is_temp_file and body_size > MEMFILE_MAX:
-                body, tmp = TemporaryFile(mode='w+b'), body
+                body, tmp = tempfile.TemporaryFile(mode='w+b'), body
                 body.write(tmp.getvalue())
                 del tmp
                 is_temp_file = True
