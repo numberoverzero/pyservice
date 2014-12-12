@@ -22,9 +22,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+import http.client
 import io
-import re
 import logging
+import re
 import tempfile
 logger = logging.getLogger(__name__)
 
@@ -43,36 +44,39 @@ def abort(status=500, msg="Internal Error"):
     raise RequestException(status, msg)
 
 
+class setter(object):
+    def __init__(self, func):
+        self.func = func
+
+    def __set__(self, obj, value):
+        self.func(obj, value)
+
+
 MEMFILE_MAX = 102400
 REQUEST_TOO_LARGE = RequestException(413, 'Request too large')
 BAD_CHUNKED_BODY = RequestException(
     400, 'Error while parsing chunked transfer body')
 INTERNAL_ERROR = RequestException(500, "Internal Error")
 UNKNOWN_OPERATION = RequestException(404, "Unknown Operation")
+HTTP_CODES = {i[0]: "{} {}".format(*i) for i in http.client.responses.items()}
 
 
 class Response(object):
-    import http.client
-    HTTP_CODES = dict(
-        (k, "{} {}".format(k, v)) for (k, v) in http.client.responses.items())
-
-    def __init__(self):
+    def __init__(self, start_response):
         self.status = 200
-        self.headers = {}
-        self.charset = 'UTF-8'
         self.body = ''
+        self.start_response = start_response
 
     def exception(self, exc):
-        '''Return appropriate status and message for a RequestException'''
+        '''Set appropriate status and message for a RequestException'''
         self.status = exc.status
         self.body = exc.msg
 
-    @property
-    def body(self):
-        '''Body as string'''
-        return self._body[0].decode(self.charset)
+    @setter
+    def status(self, value):
+        self._status = HTTP_CODES[value]
 
-    @body.setter
+    @setter
     def body(self, value):
         '''Must be a unicode string'''
 
@@ -80,40 +84,35 @@ class Response(object):
             raise INTERNAL_ERROR
 
         # Unicode -> bytes
-        value = value.encode(self.charset)
-        self.headers['Content-Length'] = len(value)
+        value = value.encode('UTF-8')
+        self._headers = [("Content-Length", str(len(value)))]
 
         # WSGI spec needs iterable of bytes
         self._body = [value]
 
-    @property
-    def body_raw(self):
-        '''Body as formatted for return from wsgi app'''
+    def send(self):
+        ''' Start the response and return the raw body '''
+        self.start_response(self._status, self._headers)
         return self._body
-
-    @property
-    def headers_list(self):
-        return [(str(h), str(v)) for (h, v) in self.headers.items()]
-
-    @property
-    def status_line(self):
-        return Response.HTTP_CODES[self.status]
 
 
 def build_pattern(string):
     '''
     string is a python format string with version and operation keys.
-    For example: "/api/{version}/{operation}"
+    For example: "/api/v1/{operation}"
     '''
-    matchers = {
-        "version": "(?P<version>[^/]+)",
-        "operation": "(?P<operation>[^/]+)"
-    }
-    return re.compile("^" + string.format(**matchers) + "/?$")
+    # Replace {operation} so that we can route an incoming request
+    string = string.format(operation="(?P<operation>[^/]+)")
+    # Ignore trailing slash, match exact string only
+    return re.compile("^{}/?$".format(string))
 
 
-def path(environ):
-    return environ['PATH_INFO']
+def load_operation(pattern, environ):
+    path = environ['PATH_INFO']
+    match = pattern.search(path)
+    if not match:
+        abort(UNKNOWN_OPERATION)
+    return match.groupdict()["operation"]
 
 
 def content_length(environ):
@@ -124,7 +123,7 @@ def chunked_body(environ):
     return environ.get('HTTP_TRANSFER_ENCODING', '').lower()
 
 
-def body(environ):
+def load_body(environ):
     clen = content_length(environ)
     if clen > MEMFILE_MAX:
         abort(REQUEST_TOO_LARGE)
