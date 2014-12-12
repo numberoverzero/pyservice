@@ -1,6 +1,5 @@
 import sys
 import types
-import builtins
 import functools
 
 noop = lambda *a, **kw: None
@@ -80,36 +79,6 @@ class Chain(object):
         if not self.__call_partial:
             self.__call_partial = self.__compile('__call__')
         return self.__call_partial(*args, **kwargs)
-
-
-class ExceptionFactory(object):
-    '''
-    Class for building and storing Exception types.
-    Built-in exception names are reserved.
-    '''
-    def __init__(self):
-        self.classes = {}
-
-    def build_exception_class(self, name):
-        self.classes[name] = type(name, (Exception,), {})
-        return self.classes[name]
-
-    def get_class(self, name):
-        # Check builtins for real exception class
-        cls = getattr(builtins, name, None)
-        # Cached?
-        if not cls:
-            cls = self.classes.get(name, None)
-        # Cache
-        if not cls:
-            cls = self.build_exception_class(name)
-        return cls
-
-    def exception(self, name, *args):
-        return self.get_class(name)(*args)
-
-    def __getattr__(self, name):
-        return self.get_class(name)
 
 
 class Extensions(object):

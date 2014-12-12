@@ -1,5 +1,5 @@
 """
-request body parsing logic and WSGIRefServer derived from bottle.py
+request body parsing logic derived from bottle.py
 (https://github.com/defnull/bottle)
 
 Copyright (c) 2014, Marcel Hellkamp.
@@ -98,40 +98,6 @@ class Response(object):
     @property
     def status_line(self):
         return Response.HTTP_CODES[self.status]
-
-
-class WSGIApplication(object):
-
-    def __init__(self, service, pattern):
-        self.service = service
-        self.pattern = build_pattern(pattern)
-
-    def get_route_kwargs(self, path):
-        r = self.pattern.search(path)
-        if not r:
-            abort(UNKNOWN_OPERATION)
-        return r.groupdict()
-
-    def __call__(self, environ, start_response):
-        """WSGI entry point."""
-        try:
-            response = Response()
-            kwargs = self.get_route_kwargs(path(environ))
-            kwargs["request_body"] = body(environ)
-            response.body = self.service.execute(**kwargs)
-        except RequestException as exception:
-            logger.debug(
-                "RequestException during WSGIApplication call",
-                exc_info=exception)
-            response.exception(exception)
-        except Exception as exception:
-            logger.debug(
-                "Unhandled exception during WSGIApplication call",
-                exc_info=exception)
-            response.exception(INTERNAL_ERROR)
-
-        start_response(response.status_line, response.headers_list)
-        return response.body_raw
 
 
 def build_pattern(string):
