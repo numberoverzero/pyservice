@@ -3,7 +3,7 @@ import functools
 import logging
 import ujson
 import requests
-import wsgi
+from . import wsgi
 import collections
 
 logger = logging.getLogger(__name__)
@@ -64,6 +64,7 @@ class Service(object):
         copy_missing(api, DEFAULT_API)
         compute_uri(api, Service)
         self.api = api
+        self.pattern = wsgi.build_pattern(self.api["uri"])
 
         # TODO: Add operation filtering
         self.plugins = {
@@ -91,32 +92,22 @@ class Service(object):
         self.functions[name] = func
         return func
 
-    def run(self, wsgi_server, **config):
-        '''
-        wsgi_server: see http://legacy.python.org/dev/peps/pep-0333/
-        '''
-        application = wsgi_application(self)
-        wsgi_server.run(application, **config)
-
-    def __call__(self, operation, request_body):
-        return ServiceProcessor(self, operation, request_body).execute()
-
-
-def wsgi_application(service):
-    pattern = wsgi.build_pattern(service.api["uri"])
-
-    def call(environ, start_response):
+    def wsgi_application(self, environ, start_response):
         response = wsgi.Response(start_response)
         try:
-            # Load operation name from path, abort if there's nothing there.
-            operation = wsgi.load_operation(pattern, environ)
-            if operation not in service.api["operations"]:
+            # Load operation name from path, abort if
+            # there's nothing there.
+            operation = wsgi.load_operation(self.pattern, environ)
+            if operation not in self.api["operations"]:
                 wsgi.abort(wsgi.UNKNOWN_OPERATION)
             request_body = wsgi.load_body(environ)
-            response.body = service(operation, request_body)
+            response.body = self(operation, request_body)
+            processor = ServiceProcessor(self, operation, request_body)
+            response.body = processor.execute()
         # service should be serializing interal exceptions
         except Exception as exception:
-            # Defined failure case - invalid body, unknown path or operation
+            # Defined failure case -
+            # invalid body, unknown path/operation
             if isinstance(exception, wsgi.RequestException):
                 response.exception(exception)
             # Unexpected failure type
@@ -124,7 +115,6 @@ def wsgi_application(service):
                 response.exception(wsgi.INTERNAL_ERROR)
         finally:
             return response.send()
-    return call
 
 
 class ClientProcessor(object):
