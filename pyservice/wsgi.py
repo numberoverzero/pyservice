@@ -27,21 +27,23 @@ import io
 import logging
 import re
 import tempfile
-logger = logging.getLogger(__name__)
 
 
 class RequestException(Exception):
-    def __init__(self, status, msg):
+    def __init__(self, status):
         self.status = status
-        self.msg = msg
 
 
-def abort(status=500, msg="Internal Error"):
+def abort(status=500):
     # Allows things like abort(INTERNAL_ERROR)
     if isinstance(status, RequestException):
         raise status
     # Create exception and raise
-    raise RequestException(status, msg)
+    raise RequestException(status)
+
+
+def is_request_exception(response):
+    return 400 <= response.status_code < 600
 
 
 class setter(object):
@@ -52,12 +54,12 @@ class setter(object):
         self.func(obj, value)
 
 
+logger = logging.getLogger(__name__)
 MEMFILE_MAX = 102400
-REQUEST_TOO_LARGE = RequestException(413, 'Request too large')
-BAD_CHUNKED_BODY = RequestException(
-    400, 'Error while parsing chunked transfer body')
-INTERNAL_ERROR = RequestException(500, "Internal Error")
-UNKNOWN_OPERATION = RequestException(404, "Unknown Operation")
+REQUEST_TOO_LARGE = RequestException(413)
+BAD_CHUNKED_BODY = RequestException(400)
+INTERNAL_ERROR = RequestException(500)
+UNKNOWN_OPERATION = RequestException(404)
 HTTP_CODES = {i[0]: "{} {}".format(*i) for i in http.client.responses.items()}
 
 
@@ -70,7 +72,7 @@ class Response(object):
     def exception(self, exc):
         '''Set appropriate status and message for a RequestException'''
         self.status = exc.status
-        self.body = exc.msg
+        self.body = ''
 
     @setter
     def status(self, value):
@@ -79,9 +81,6 @@ class Response(object):
     @setter
     def body(self, value):
         '''Must be a unicode string'''
-
-        if not isinstance(value, str):
-            raise INTERNAL_ERROR
 
         # Unicode -> bytes
         value = value.encode('UTF-8')

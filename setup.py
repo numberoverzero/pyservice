@@ -16,7 +16,7 @@ def read(*filenames, **kwargs):
     return sep.join(buf)
 
 long_description = read('README')
-version = '0.0.1'
+version = '0.9.0'
 
 setup(
     name='pyservice',

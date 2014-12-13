@@ -1,27 +1,77 @@
 import builtins
+import functools
 import logging
 import ujson
+import requests
 import wsgi
 import collections
-import common
+
 logger = logging.getLogger(__name__)
+DEFAULT_API = {
+    "version": "0",
+    "timeout": 60,
+    "debug": False,
+    "endpoint": {
+        "scheme": "https",
+        "host": "localhost",
+        "port": 8080,
+        "path": "/api/{version}/{operation}"
+    },
+    "operations": [],
+    "exceptions": []
+}
+
+
+def copy_missing(dst, src):
+    """Copy any keys in `src` to `dst` that are missing in `dst`"""
+    for key, value in src.items():
+        dst[key] = dst.get(key, value)
+
+
+def compute_uri(api, consumer):
+    if consumer is Client:
+        uri = "{scheme}://{host}:{port}{path}".format(**api["endpoint"])
+    else:  # consumer is Service:
+        uri = api["endpoint"]["path"]
+    api["uri"] = uri.format(operation="{operation}", **api)
+
+
+class Client(object):
+    def __init__(self, **api):
+        copy_missing(api, DEFAULT_API)
+        compute_uri(api, Client)
+        self.api = api
+
+        self.plugins = []
+        self.exceptions = ExceptionFactory()
+
+    def __getattr__(self, operation):
+        if operation not in self.api["operations"]:
+            raise ValueError("Unknown operation '{}'".format(operation))
+        return functools.partial(self, operation=operation)
+
+    def plugin(self, func):
+        self.plugins.append(func)
+        return func
+
+    def __call__(self, operation, **request):
+        '''Entry point for remote calls'''
+        return ClientProcessor(self, operation, request).execute()
 
 
 class Service(object):
-    def __init__(self, **config):
-        self.config = {}
-        self.config.update(config)
+    def __init__(self, **api):
+        copy_missing(api, DEFAULT_API)
+        compute_uri(api, Service)
+        self.api = api
 
         # TODO: Add operation filtering
         self.plugins = {
             "request": [],
             "operation": []
         }
-        self.exceptions = common.ExceptionFactory()
-
-    @common.cache
-    def debugging(self):
-        return self.config.get("debug", False)
+        self.functions = {}
+        self.exceptions = ExceptionFactory()
 
     def plugin(self, scope, *, func=None):
         if scope not in ["request", "operation"]:
@@ -33,88 +83,125 @@ class Service(object):
         return func
 
     def operation(self, name, *, func=None):
-        if name not in self.operations:
+        if name not in self.api["operations"]:
             raise ValueError("Unknown operation {}".format(name))
         # Return decorator that takes function
         if not func:
             return lambda func: self.operation(name=name, func=func)
-        self.operations[name].func = func
+        self.functions[name] = func
         return func
 
-    def run(self, wsgi_server, *args, **config):
+    def run(self, wsgi_server, **config):
         '''
-        wsgi_server must have a .run(app, **kwargs) method which takes
-        a WSGI application as its argument, and optional configuration.
-
-        See http://legacy.python.org/dev/peps/pep-0333/ for WSGI specification
-        and https://github.com/bottlepy/bottle/blob/master/bottle.py#L2618 for
-        examples of various adapters for many frameworks, including
-        CherryPy, Waitress, Paste, Tornado, AppEngine, Twisted, GEvent,
-        Gunicorn, and many more.  These can all be dropped in for wsgi_server.
+        wsgi_server: see http://legacy.python.org/dev/peps/pep-0333/
         '''
-        run_config = self.config.copy()
-        run_config.update(config)
+        application = wsgi_application(self)
+        wsgi_server.run(application, **config)
 
-        logger.info("Service uri is {}".format(self.endpoint["path"]))
-        wsgi_app = wsgi.WSGIApplication(self, self.endpoint["path"])
-        wsgi_server.run(wsgi_app, **run_config)
-
-    def execute(self, *, version, operation, request_body):
-        '''WSGI Application entry point'''
-        self.validate_params(version, operation)
-        operation = self.operations[operation]
-        processor = Processor(self, operation, request_body)
-        return processor.execute()
-
-    def validate_params(self, version, operation):
-        if version != self.version:
-            msg = "Unsupported version {}".format(version)
-            wsgi.abort(404, msg)
-        if operation not in self.operations:
-            msg = "Unsupported operation {}".format(operation)
-            wsgi.abort(404, msg)
+    def __call__(self, operation, request_body):
+        return ServiceProcessor(self, operation, request_body).execute()
 
 
-class WSGIApplication(object):
+def wsgi_application(service):
+    pattern = wsgi.build_pattern(service.api["uri"])
 
-    def __init__(self, service, pattern):
-        self.service = service
-        self.pattern = wsgi.build_pattern(pattern)
-
-    def get_route_kwargs(self, path):
-        r = self.pattern.search(path)
-        if not r:
-            wsgi.abort(wsgi.UNKNOWN_OPERATION)
-        return r.groupdict()
-
-    def __call__(self, environ, start_response):
-        """WSGI entry point."""
+    def call(environ, start_response):
+        response = wsgi.Response(start_response)
         try:
-            response = wsgi.Response()
-            kwargs = self.get_route_kwargs(wsgi.path(environ))
-            kwargs["request_body"] = wsgi.body(environ)
-            response.body = self.service.execute(**kwargs)
-        except wsgi.RequestException as exception:
-            logger.debug(
-                "RequestException during WSGIApplication call",
-                exc_info=exception)
-            response.exception(exception)
+            # Load operation name from path, abort if there's nothing there.
+            operation = wsgi.load_operation(pattern, environ)
+            if operation not in service.api["operations"]:
+                wsgi.abort(wsgi.UNKNOWN_OPERATION)
+            request_body = wsgi.load_body(environ)
+            response.body = service(operation, request_body)
+        # service should be serializing interal exceptions
         except Exception as exception:
-            logger.debug(
-                "Unhandled exception during WSGIApplication call",
-                exc_info=exception)
-            response.exception(wsgi.INTERNAL_ERROR)
+            # Defined failure case - invalid body, unknown path or operation
+            if isinstance(exception, wsgi.RequestException):
+                response.exception(exception)
+            # Unexpected failure type
+            else:
+                response.exception(wsgi.INTERNAL_ERROR)
+        finally:
+            return response.send()
+    return call
 
-        start_response(response.status_line, response.headers_list)
-        return response.body_raw
+
+class ClientProcessor(object):
+    def __init__(self, client, operation, request):
+        self.client = client
+        self.operation = operation
+
+        self.context = Context(operation, self)
+        self.context.client = client
+        self.request = Container()
+        self.request.update(request)
+        self.request_body = None
+        self.response = Container()
+        self.response_body = None
+
+        self.index = -1
+
+    def execute(self):
+        self.continue_execution()
+        return self.response
+
+    def continue_execution(self):
+        self.index += 1
+        plugins = self.client.plugins
+        n = len(plugins)
+
+        if self.index == n:
+            # Last plugin of this type, package args and invoke remote call
+            self.remote_call()
+        # index < n
+        elif self.index < n:
+            plugins[self.index](self.request, self.response, self.context)
+        else:
+            # BUG - index > n means processor ran index over plugin length
+            raise ValueError("Bug in pyservice.ClientProcessor!")
+
+    def remote_call(self):
+        self.request_body = serialize(self.request)
+
+        uri = self.client.api["uri"].format(operation=self.operation)
+        data = self.request_body
+        timeout = self.client.api["timeout"]
+        response = requests.post(uri, data=data, timeout=timeout)
+
+        self.handle_http_errors(response)
+        deserialize(self.response_body, self.response)
+        self.handle_service_exceptions()
+
+    def handle_http_errors(self, response):
+        if wsgi.is_request_exception(response):
+            message = "{} {}".format(response.status_code, response.reason)
+            self.raise_exception({
+                "cls": "RequestException",
+                "args": (message,)
+            })
+
+    def handle_service_exceptions(self):
+        exception = self.response.get("__exception__", None)
+        if exception:
+            # Don't leak incomplete operation state
+            self.response.clear()
+            self.raise_exception(exception)
+
+    def raise_exception(self, exception):
+        name = exception["cls"]
+        args = exception["args"]
+        exception = getattr(self.client.exceptions, name)(*args)
+        raise exception
 
 
-class Processor(object):
+class ServiceProcessor(object):
     def __init__(self, service, operation, request_body):
         self.service = service
         self.operation = operation
 
-        self.context = Context(service, operation, self)
+        self.context = Context(operation, self)
+        self.context.service = service
         self.request = Container()
         self.request_body = request_body
         self.response = Container()
@@ -130,73 +217,74 @@ class Processor(object):
             self.continue_execution()
             return self.response_body
         except Exception as exception:
-            msg = "Exception during operation {}".format(self.operation.name)
+            msg = "Exception during operation {}".format(self.operation)
             logger.exception(msg, exc_info=exception)
             self.raise_exception(exception)
             return self.response_body
-
-    def raise_exception(self, exception):
-        cls = exception.__class__.__name__
-        args = exception.args
-
-        # Don't let non-whitelisted exceptions escape if we're not debugging
-        whitelisted = cls in self.operation.exceptions
-        if not whitelisted and not self.service.debugging:
-            wsgi.abort(wsgi.INTERNAL_ERROR)
-
-        # Don't leak incomplete operation state
-        self.response.clear()
-        self.response["__exception__"] = {
-            "cls": cls,
-            "args": args
-        }
-        self._serialize_response()
 
     def continue_execution(self):
         self.index += 1
         plugins = self.service.plugins[self.state]
         n = len(plugins)
 
-        if self.index > n:
-            # Terminal point so that service.invoke
-            # can safely call context.process_request()
-            return
-        elif self.index == n:
+        if self.index == n:
             # Last plugin of this type, either roll over to the next plugin
             # type, or invoke the function underneath it all
             if self.state == "request":
                 self.index = -1
                 self.state = "operation"
 
-                self._deserialize_request()
+                deserialize(self.request_body, self.request)
                 self.continue_execution()
-                self._serialize_response()
+                self.response_body = serialize(self.response)
             elif self.state == "operation":
-                self.operation.func(self.operation, self.request,
-                                    self.response, self.context)
+                func = self.service.functions[self.operation]
+                func(self.operation, self.request, self.response, self.context)
                 self.state = None
         # index < n
-        else:
+        elif self.index < n:
             if self.state == "request":
                 plugins[self.index](self.context)
             elif self.state == "operation":
                 plugins[self.index](self.request, self.response, self.context)
+        else:
+            # BUG - index > n means processor ran index over plugin length
+            wsgi.abort(wsgi.INTERNAL_ERROR)
 
-    def _deserialize_request(self):
-        self.request.update(ujson.loads(self.request_body))
+    def raise_exception(self, exception):
+        name = exception.__class__.__name__
+        args = exception.args
 
-    def _serialize_response(self):
-        self.response_body = ujson.dumps(self.response)
+        # Don't let non-whitelisted exceptions escape if we're not debugging
+        whitelisted = name in self.service.api["exceptions"]
+        debugging = self.service.api["debug"]
+        if not whitelisted and not debugging:
+            wsgi.abort(wsgi.INTERNAL_ERROR)
+
+        # Don't leak incomplete operation state
+        self.response.clear()
+        self.response["__exception__"] = {
+            "cls": name,
+            "args": args
+        }
+        self.response_body = serialize(self.response)
+
+
+def serialize(container):
+    return ujson.dumps(container)
+
+
+def deserialize(string, container):
+    container.update(ujson.loads(string))
 
 
 class Context(object):
-    def __init__(self, service, operation, processor):
-        self.service = service
+    def __init__(self, operation, processor):
         self.operation = operation
-        self.processor = processor
+        self.__processor__ = processor
 
     def process_request(self):
-        self.processor.continue_execution()
+        self.__processor__.continue_execution()
 
 
 class Container(collections.defaultdict):
