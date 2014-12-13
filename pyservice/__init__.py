@@ -23,7 +23,6 @@ THE SOFTWARE.
 __all__ = ["Client", "Service"]
 
 import builtins
-import collections
 import functools
 import http.client
 import io
@@ -135,11 +134,16 @@ class Context(object):
         self.__processor__.continue_execution()
 
 
-class Container(collections.defaultdict):
-    DEFAULT_FACTORY = lambda: None
-
+class Container(dict):
+    """
+    Not using defaultdict since we don't want to store accessed keys -
+    both for space considerations and iterating over keys.
+    """
     def __init__(self):
-        super().__init__(Container.DEFAULT_FACTORY)
+        super().__init__()
+
+    def __missing__(self, key):
+        return None
 
     def __getattr__(self, name):
         return self[name]
