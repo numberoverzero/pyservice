@@ -109,14 +109,21 @@ def serialize(container):
     return ujson.dumps(container)
 
 
+# PUBLIC API
+# ----------
 class Container(dict):
     """
     Not using defaultdict since we don't want to store accessed keys -
     both for space considerations and iterating over keys.
-    """
-    def __init__(self):
-        super().__init__()
 
+    __contains__ will still work properly, unlike defaultdict after a
+    getitem.
+
+    assert "foo" not in Container()
+    c = Container()
+    c["foo"]
+    assert "foo" not in c
+    """
     def __missing__(self, key):
         return None
 
@@ -127,6 +134,8 @@ class Container(dict):
         self[name] = value
 
 
+# PUBLIC API
+# ----------
 class Context(object):
     def __init__(self, operation, processor):
         self.operation = operation
@@ -136,6 +145,8 @@ class Context(object):
         self.__processor__.continue_execution()
 
 
+# PUBLIC API
+# ----------
 class ExceptionFactory(object):
     '''
     Class for building and storing Exception types.
@@ -179,6 +190,8 @@ class WriteOnly(object):
 # ================
 
 
+# PUBLIC API
+# ----------
 class Client(object):
     def __init__(self, **api):
         copy_missing(api, DEFAULT_API)
@@ -276,6 +289,8 @@ class ClientProcessor(object):
 # ================
 
 
+# PUBLIC API
+# ----------
 class Service(object):
     def __init__(self, **api):
         copy_missing(api, DEFAULT_API)

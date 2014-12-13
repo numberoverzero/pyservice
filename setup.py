@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name='pyservice',
-    version='0.9.0',
+    version='0.8.0',
     description='web services with python made easy',
     long_description=open('README.md').read(),
     author='Joe Cross',
