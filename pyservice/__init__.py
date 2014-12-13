@@ -36,7 +36,12 @@ import ujson
 class RequestException(Exception):
     def __init__(self, status):
         self.status = status
-
+REQUEST_TOO_LARGE = RequestException(413)
+BAD_CHUNKED_BODY = RequestException(400)
+INTERNAL_ERROR = RequestException(500)
+UNKNOWN_OPERATION = RequestException(404)
+HTTP_CODES = {i[0]: "{} {}".format(*i) for i in http.client.responses.items()}
+MEMFILE_MAX = 102400
 
 LOGGER = logging.getLogger(__name__)
 DEFAULT_API = {
@@ -52,50 +57,11 @@ DEFAULT_API = {
     "operations": [],
     "exceptions": []
 }
-MEMFILE_MAX = 102400
-HTTP_CODES = {i[0]: "{} {}".format(*i) for i in http.client.responses.items()}
-REQUEST_TOO_LARGE = RequestException(413)
-BAD_CHUNKED_BODY = RequestException(400)
-INTERNAL_ERROR = RequestException(500)
-UNKNOWN_OPERATION = RequestException(404)
 
 
 # ================
 # Utility
 # ================
-
-def copy_missing(dst, src):
-    """Copy any keys in `src` to `dst` that are missing in `dst`"""
-    for key, value in src.items():
-        dst[key] = dst.get(key, value)
-
-
-def compute_uri(api, consumer):
-    if consumer is Client:
-        uri = "{scheme}://{host}:{port}{path}".format(**api["endpoint"])
-    else:  # consumer is Service:
-        uri = api["endpoint"]["path"]
-    api["uri"] = uri.format(operation="{operation}", **api)
-
-
-def serialize(container):
-    return ujson.dumps(container)
-
-
-def deserialize(string, container):
-    container.update(ujson.loads(string))
-
-
-def abort(status=500):
-    # Allows things like abort(INTERNAL_ERROR)
-    if isinstance(status, RequestException):
-        raise status
-    # Create exception and raise
-    raise RequestException(status)
-
-
-def is_request_exception(response):
-    return 400 <= response.status_code < 600
 
 
 def build_pattern(string):
@@ -109,29 +75,38 @@ def build_pattern(string):
     return re.compile("^{}/?$".format(string))
 
 
+def compute_uri(api, consumer):
+    if consumer is Client:
+        uri = "{scheme}://{host}:{port}{path}".format(**api["endpoint"])
+    else:  # consumer is Service:
+        uri = api["endpoint"]["path"]
+    api["uri"] = uri.format(operation="{operation}", **api)
+
+
+def copy_missing(dst, src):
+    """Copy any keys in `src` to `dst` that are missing in `dst`"""
+    for key, value in src.items():
+        dst[key] = dst.get(key, value)
+
+
+def deserialize(string, container):
+    container.update(ujson.loads(string))
+
+
+def is_request_exception(response):
+    return 400 <= response.status_code < 600
+
+
 def load_operation(pattern, environ):
     path = environ['PATH_INFO']
     match = pattern.search(path)
     if not match:
-        abort(UNKNOWN_OPERATION)
+        raise UNKNOWN_OPERATION
     return match.groupdict()["operation"]
 
 
-class WriteOnly(object):
-    def __init__(self, func):
-        self.func = func
-
-    def __set__(self, obj, value):
-        self.func(obj, value)
-
-
-class Context(object):
-    def __init__(self, operation, processor):
-        self.operation = operation
-        self.__processor__ = processor
-
-    def process_request(self):
-        self.__processor__.continue_execution()
+def serialize(container):
+    return ujson.dumps(container)
 
 
 class Container(dict):
@@ -150,6 +125,15 @@ class Container(dict):
 
     def __setattr__(self, name, value):
         self[name] = value
+
+
+class Context(object):
+    def __init__(self, operation, processor):
+        self.operation = operation
+        self.__processor__ = processor
+
+    def process_request(self):
+        self.__processor__.continue_execution()
 
 
 class ExceptionFactory(object):
@@ -182,9 +166,18 @@ class ExceptionFactory(object):
         return self.get_class(name)
 
 
+class WriteOnly(object):
+    def __init__(self, func):
+        self.func = func
+
+    def __set__(self, obj, value):
+        self.func(obj, value)
+
+
 # ================
 # Client
 # ================
+
 
 class Client(object):
     def __init__(self, **api):
@@ -323,7 +316,7 @@ class Service(object):
             # there's nothing there.
             operation = load_operation(self.pattern, environ)
             if operation not in self.api["operations"]:
-                abort(UNKNOWN_OPERATION)
+                raise UNKNOWN_OPERATION
             request_body = load_body(environ)
             processor = ServiceProcessor(self, operation, request_body)
             response.body = processor.execute()
@@ -393,7 +386,7 @@ class ServiceProcessor(object):
                 plugins[self.index](self.request, self.response, self.context)
         else:
             # BUG - index > n means processor ran index over plugin length
-            abort(INTERNAL_ERROR)
+            raise INTERNAL_ERROR
 
     def raise_exception(self, exception):
         name = exception.__class__.__name__
@@ -403,7 +396,7 @@ class ServiceProcessor(object):
         whitelisted = name in self.service.api["exceptions"]
         debugging = self.service.api["debug"]
         if not whitelisted and not debugging:
-            abort(INTERNAL_ERROR)
+            raise INTERNAL_ERROR
 
         # Don't leak incomplete operation state
         self.response.clear()
@@ -447,7 +440,7 @@ THE SOFTWARE.
 
 class Response(object):
     def __init__(self, start_response):
-        self.status = 200
+        self.status = 500
         self.body = ''
         self.start_response = start_response
 
@@ -462,7 +455,9 @@ class Response(object):
 
     @WriteOnly
     def body(self, value):
-        '''Must be a unicode string'''
+        '''MUST be a unicode string.  MUST be empty for non-200 statuses'''
+        if value:
+            self.status = 200
 
         # Unicode -> bytes
         value = value.encode('UTF-8')
@@ -488,12 +483,12 @@ def chunked_body(environ):
 def load_body(environ):
     clen = content_length(environ)
     if clen > MEMFILE_MAX:
-        abort(REQUEST_TOO_LARGE)
+        raise REQUEST_TOO_LARGE
     if clen < 0:
         clen = MEMFILE_MAX + 1
     data = _body(environ).read(clen)
     if len(data) > MEMFILE_MAX:
-        abort(REQUEST_TOO_LARGE)
+        raise REQUEST_TOO_LARGE
     return data.decode("UTF-8")
 
 
@@ -538,14 +533,14 @@ def _iter_chunked(read, bufsize, environ):
             c = read(1)
             header += c
             if not c:
-                abort(BAD_CHUNKED_BODY)
+                raise BAD_CHUNKED_BODY
             if len(header) > bufsize:
-                abort(BAD_CHUNKED_BODY)
+                raise BAD_CHUNKED_BODY
         size, _, _ = header.partition(sem)
         try:
             maxread = int(size.strip(), 16)
         except ValueError:
-            abort(BAD_CHUNKED_BODY)
+            raise BAD_CHUNKED_BODY
         if maxread == 0:
             break
         buff = bs
@@ -554,8 +549,8 @@ def _iter_chunked(read, bufsize, environ):
                 buff = read(min(maxread, bufsize))
             part, buff = buff[:maxread], buff[maxread:]
             if not part:
-                abort(BAD_CHUNKED_BODY)
+                raise BAD_CHUNKED_BODY
             yield part
             maxread -= len(part)
         if read(2) != rn:
-            abort(BAD_CHUNKED_BODY)
+            raise BAD_CHUNKED_BODY
