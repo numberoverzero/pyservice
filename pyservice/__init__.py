@@ -27,14 +27,17 @@ import collections
 import functools
 import http.client
 import io
-import logging
 import re
 import requests
 import tempfile
 import ujson
 
 
-logger = logging.getLogger(__name__)
+class RequestException(Exception):
+    def __init__(self, status):
+        self.status = status
+
+
 DEFAULT_API = {
     "version": "0",
     "timeout": 60,
@@ -48,6 +51,12 @@ DEFAULT_API = {
     "operations": [],
     "exceptions": []
 }
+MEMFILE_MAX = 102400
+HTTP_CODES = {i[0]: "{} {}".format(*i) for i in http.client.responses.items()}
+REQUEST_TOO_LARGE = RequestException(413)
+BAD_CHUNKED_BODY = RequestException(400)
+INTERNAL_ERROR = RequestException(500)
+UNKNOWN_OPERATION = RequestException(404)
 
 
 # ================
@@ -113,11 +122,6 @@ class WriteOnly(object):
 
     def __set__(self, obj, value):
         self.func(obj, value)
-
-
-class RequestException(Exception):
-    def __init__(self, status):
-        self.status = status
 
 
 class Context(object):
@@ -352,8 +356,6 @@ class ServiceProcessor(object):
             self.continue_execution()
             return self.response_body
         except Exception as exception:
-            msg = "Exception during operation {}".format(self.operation)
-            logger.exception(msg, exc_info=exception)
             self.raise_exception(exception)
             return self.response_body
 
@@ -434,14 +436,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
-
-MEMFILE_MAX = 102400
-REQUEST_TOO_LARGE = RequestException(413)
-BAD_CHUNKED_BODY = RequestException(400)
-INTERNAL_ERROR = RequestException(500)
-UNKNOWN_OPERATION = RequestException(404)
-HTTP_CODES = {i[0]: "{} {}".format(*i) for i in http.client.responses.items()}
 
 
 class Response(object):
