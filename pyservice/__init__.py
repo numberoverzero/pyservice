@@ -27,6 +27,7 @@ import collections
 import functools
 import http.client
 import io
+import logging
 import re
 import requests
 import tempfile
@@ -38,6 +39,7 @@ class RequestException(Exception):
         self.status = status
 
 
+LOGGER = logging.getLogger(__name__)
 DEFAULT_API = {
     "version": "0",
     "timeout": 60,
@@ -137,7 +139,7 @@ class Container(collections.defaultdict):
     DEFAULT_FACTORY = lambda: None
 
     def __init__(self):
-        super().__init__(self, Container.DEFAULT_FACTORY)
+        super().__init__(Container.DEFAULT_FACTORY)
 
     def __getattr__(self, name):
         return self[name]
@@ -246,6 +248,7 @@ class ClientProcessor(object):
         response = requests.post(uri, data=data, timeout=timeout)
 
         self.handle_http_errors(response)
+        self.response_body = response.text
         deserialize(self.response_body, self.response)
         self.handle_service_exceptions()
 
@@ -318,11 +321,11 @@ class Service(object):
             if operation not in self.api["operations"]:
                 abort(UNKNOWN_OPERATION)
             request_body = load_body(environ)
-            response.body = self(operation, request_body)
             processor = ServiceProcessor(self, operation, request_body)
             response.body = processor.execute()
         # service should be serializing interal exceptions
         except Exception as exception:
+            LOGGER.debug("Exception during wsgi call:", exc_info=exception)
             # Defined failure case -
             # invalid body, unknown path/operation
             if isinstance(exception, RequestException):
@@ -376,7 +379,7 @@ class ServiceProcessor(object):
                 self.response_body = serialize(self.response)
             elif self.state == "operation":
                 func = self.service.functions[self.operation]
-                func(self.operation, self.request, self.response, self.context)
+                func(self.request, self.response, self.context)
                 self.state = None
         # index < n
         elif self.index < n:
