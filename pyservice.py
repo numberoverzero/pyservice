@@ -34,6 +34,7 @@ import ujson
 
 
 class RequestException(Exception):
+    """Not visible to plugins or client/service consumers."""
     def __init__(self, status):
         self.status = status
 REQUEST_TOO_LARGE = RequestException(413)
@@ -76,6 +77,7 @@ def build_pattern(string):
 
 
 def compute_uri(api, consumer):
+    """Construct the appropriate uri for Client/Service to call or match"""
     if consumer is Client:
         uri = "{scheme}://{host}:{port}{path}".format(**api["endpoint"])
     else:  # consumer is Service:
@@ -90,6 +92,7 @@ def copy_missing(dst, src):
 
 
 def deserialize(string, container):
+    """Load string as dict into container"""
     container.update(ujson.loads(string))
 
 
@@ -98,6 +101,7 @@ def is_request_exception(response):
 
 
 def load_operation(pattern, environ):
+    """Return the operation name from a request, or raise UNKNOWN_OPERATION"""
     path = environ['PATH_INFO']
     match = pattern.search(path)
     if not match:
@@ -106,6 +110,7 @@ def load_operation(pattern, environ):
 
 
 def serialize(container):
+    """Dump container into string"""
     return ujson.dumps(container)
 
 
@@ -113,30 +118,36 @@ def serialize(container):
 # ----------
 class Container(dict):
     """
-    Not using defaultdict since we don't want to store accessed keys -
-    both for space considerations and iterating over keys.
+    Allows attribute access to members, as well as index access.  Missing keys
+    return None - missing values are not populated.
 
-    __contains__ will still work properly, unlike defaultdict after a
-    getitem.
-
-    assert "foo" not in Container()
-    c = Container()
-    c["foo"]
-    assert "foo" not in c
+    >>> o = object()
+    >>> c = Container()
+    >>> c.key = o
+    >>> assert c["key"] is c.key
     """
+
+    def __init__(self):
+        super().__init()
+        self.__dict__ = self
+
     def __missing__(self, key):
         return None
-
-    def __getattr__(self, name):
-        return self[name]
-
-    def __setattr__(self, name, value):
-        self[name] = value
 
 
 # PUBLIC API
 # ----------
 class Context(object):
+    """
+    Available during requests, provides a dumping ground for plugins to
+    store objects, such as database handles or shared caches.
+
+    Plugins can execute code before and after the rest of the request is
+    executed.  To continue processing the request, use
+    `context.process_request()`.  This MUST NOT be called more than once in
+    a single plugin.  To discontinue processing the request (ie. for caching)
+    simply do not invoke `process_request()`.
+    """
     def __init__(self, operation, processor):
         self.operation = operation
         self.__processor__ = processor
@@ -148,10 +159,14 @@ class Context(object):
 # PUBLIC API
 # ----------
 class ExceptionFactory(object):
-    '''
+    """
     Class for building and storing Exception types.
     Built-in exception names are reserved.
-    '''
+
+    Constructed classes are cached to keep types consistent across calls.
+    >>> ex = ExceptionFactory()
+    >>> ex.BadFoo is ex.BadFoo
+    """
     def __init__(self):
         self.classes = {}
 
@@ -178,6 +193,7 @@ class ExceptionFactory(object):
 
 
 class WriteOnly(object):
+    """Write-only property."""
     def __init__(self, func):
         self.func = func
 
@@ -399,9 +415,6 @@ class ServiceProcessor(object):
                 plugins[self.index](self.context)
             elif self.state == "operation":
                 plugins[self.index](self.request, self.response, self.context)
-        else:
-            # BUG - index > n means processor ran index over plugin length
-            raise INTERNAL_ERROR
 
     def raise_exception(self, exception):
         name = exception.__class__.__name__
@@ -454,13 +467,23 @@ THE SOFTWARE.
 
 
 class Response(object):
+    """
+    Simple class for setting response body and status.
+
+    Any non-empty body will use status 200, while any call to
+    `Response.exception` will set body to ''.
+
+    To correctly start a response and return the WSGI expected body, use:
+    `return response.send()` which will both start the response, and return
+    a single-value array which contains the encoded body.
+    """
     def __init__(self, start_response):
         self.status = 500
         self.body = ''
         self.start_response = start_response
 
     def exception(self, exc):
-        '''Set appropriate status and message for a RequestException'''
+        '''Set appropriate status and body for a RequestException'''
         self.status = exc.status
         self.body = ''
 
