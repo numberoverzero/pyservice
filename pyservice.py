@@ -127,12 +127,9 @@ class Container(dict):
     >>> assert c["key"] is c.key
     """
 
-    def __init__(self):
-        super().__init()
-        self.__dict__ = self
-
-    def __missing__(self, key):
-        return None
+    __getattr__ = dict.__getitem__
+    __setattr__ = dict.__setitem__
+    __missing__ = lambda s, k: None
 
 
 # PUBLIC API
