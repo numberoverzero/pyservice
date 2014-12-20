@@ -10,7 +10,7 @@ setup(
     author_email='joe.mcross@gmail.com',
     url='http://github.com/numberoverzero/pyservice/',
     py_modules=['pyservice'],
-    scripts=['pyservice.py'],
+    packages=['pyservice'],
     install_requires=['requests', 'ujson'],
     license='MIT',
     platforms='any',
