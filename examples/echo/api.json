@@ -1,0 +1,28 @@
+{
+    "endpoint": {
+        "scheme": "http",
+        "host": "localhost",
+        "port": 8080,
+        "path": "/api/{version}/{operation}"
+    },
+    "timeout": 5,
+
+    "operations": {
+        "greet": {
+            "input": ["name", "city"],
+            "output": ["greeting", "question"],
+            "exceptions": ["InvalidName", "InvalidCity"]
+        },
+        "echo": {
+            "input": ["value"],
+            "output": ["value"],
+            "exceptions": ["Unauthorized"]
+        }
+    },
+    "exceptions": [
+        "InvalidName",
+        "InvalidCity",
+        "RequestThrottled",
+        "Unauthorized"
+    ]
+}
