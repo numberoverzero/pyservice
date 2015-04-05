@@ -3,8 +3,8 @@ import io
 import tempfile
 
 
-class WriteOnly(object):
-    """Write-only property."""
+class write_only(object):
+    """ Write-only property. """
     def __init__(self, func):
         self.func = func
 
@@ -25,7 +25,11 @@ HTTP_CODES = {i[0]: "{} {}".format(*i) for i in http.client.responses.items()}
 MEMFILE_MAX = 102400
 
 
-def is_request_exception(response):
+def is_request_exception(response):  # pragma: no cover
+    """
+    We're not using raise_for_status because we want to wrap transport
+    errors and server failures into client exceptions
+    """
     return 400 <= response.status_code < 600
 
 
@@ -56,13 +60,22 @@ THE SOFTWARE.
 
 
 class Request(object):
+    """
+    Expose operation and body for a given request and service.
+
+    Tightly coupled to the implementation of pyservice.Service.  This is
+    primarily chrome over the Service/wsgi.environ boundary, especially
+    loading the request body.
+
+    This should be the only place wsgi.load_body is called directly.
+    """
     def __init__(self, service, environ):
         self.service = service
         self.environ = environ
 
     @property
     def operation(self):
-        path = self.environ['PATH_INFO']
+        path = self.environ["PATH_INFO"]
         match = self.service.api["endpoint"]["service_pattern"].search(path)
         if not match:
             raise UNKNOWN_OPERATION
@@ -86,6 +99,14 @@ class Response(object):
     To correctly start a response and return the WSGI expected body, use:
     `return response.send()` which will both start the response, and return
     a single-value array which contains the encoded body.
+
+    Example:
+
+        def wsgi_application(environ, start_response):
+            response = Response(start_response)
+            response.body = "Hello, World!"
+            return response.send()
+
     """
     def __init__(self, start_response):
         self.status = 500
@@ -97,11 +118,11 @@ class Response(object):
         self.status = exc.status
         self.body = ''
 
-    @WriteOnly
+    @write_only
     def status(self, value):
         self._status = HTTP_CODES[value]
 
-    @WriteOnly
+    @write_only
     def body(self, value):
         '''MUST be a unicode string.  MUST be empty for non-200 statuses'''
         if value:
@@ -125,7 +146,7 @@ def content_length(environ):
 
 
 def chunked_body(environ):
-    return environ.get('HTTP_TRANSFER_ENCODING', '').lower()
+    return "chunked" in environ.get('HTTP_TRANSFER_ENCODING', '').lower()
 
 
 def load_body(environ):
@@ -141,9 +162,14 @@ def load_body(environ):
 
 
 def _body(environ):
+    try:
+        read_func = environ['wsgi.input'].read
+    except KeyError:
+        # If there's no input we don't need to do any chunking, etc
+        environ['wsgi.input'] = io.BytesIO()
+        return environ['wsgi.input']
     chunked = chunked_body(environ)
     body_iter = _iter_chunked if chunked else _iter_body
-    read_func = environ['wsgi.input'].read
     try:
         body, body_size, is_temp_file = io.BytesIO(), 0, False
         for part in body_iter(read_func, MEMFILE_MAX, environ):
@@ -158,6 +184,7 @@ def _body(environ):
         body.seek(0)
         return body
     except RequestException:
+        # Probably BAD_CHUNKED_BODY
         body.close()
         raise
 

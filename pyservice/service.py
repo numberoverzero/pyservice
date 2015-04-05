@@ -35,6 +35,7 @@ class Service(object):
         return func
 
     def wsgi_application(self, environ, start_response):
+        # No validation until we ask for operation or body
         request = wsgi.Request(self, environ)
         response = wsgi.Response(start_response)
 
