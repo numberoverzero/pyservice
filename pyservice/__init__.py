@@ -20,3 +20,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 """
+
+from pyservice.client import Client
+from pyservice.service import Service
+
+__all__ = ["Client", "Service"]
