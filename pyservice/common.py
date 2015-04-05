@@ -4,7 +4,7 @@ import ujson
 
 DEFAULT_API = {
     "version": "0",
-    "timeout": 60,
+    "timeout": 3,
     "debug": False,
     "endpoint": {
         "scheme": "https",

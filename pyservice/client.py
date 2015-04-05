@@ -1,7 +1,8 @@
-import common
 import functools
-import wsgi
 import requests
+
+from . import common
+from . import wsgi
 
 
 class Client(object):

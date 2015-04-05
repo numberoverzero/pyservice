@@ -1,7 +1,9 @@
-import common
 import re
-import wsgi
 import logging
+
+from . import common
+from . import wsgi
+
 logger = logging.getLogger(__name__)
 
 
