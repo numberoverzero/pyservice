@@ -10,7 +10,7 @@ Downloads https://pypi.python.org/pypi/pyservice
 
 Source https://github.com/numberoverzero/pyservice
 
-Microservice framework for high tps, designed for readability and code re-use
+Microservice framework for high throughput, designed for readability and code re-use
 
 # Installation
 
@@ -18,14 +18,9 @@ Microservice framework for high tps, designed for readability and code re-use
 
 # Getting Started
 
-pyservice was designed from the ground up to minimize request overhead, while
-still exposing the relevant pieces of the request chain for extension.  The
-file is less than 1000 lines including docstrings and comments
-(566 @ 12/12/14), which makes the source a great reference when you've got
-questions.
+pyservice was designed from the ground up to minimize request overhead, while still exposing the relevant pieces of the request chain for extension.
 
-Let's get some code going.  First, we'll define a small api.  These are just
-nested dictonaries - feel free to load them from a json file.
+First, we'll define a small api.  These are just nested dictonaries - feel free to load them from a json file.
 
 ```python
 # Service/Client just use a dict for specifying an api
@@ -110,13 +105,10 @@ assert item == same_item
 
 We can plug into calls in two scopes:
 
-* `request`, which is before the request and response bodies
-   have been created and after they've been consumed
-* `operation`, which is after the request and response bodies
-   have been created and before they've been consumed.
+* `request`, which is before the request and response bodies have been created and after they've been consumed
+* `operation`, which is after the request and response bodies have been created and before they've been consumed.
 
-The difference is important for things like sqlalchemy, where serialization
-should occur before the connection is closed.
+The difference is important for things like sqlalchemy, where serialization should occur before the connection is closed.
 
 ```python
 
@@ -150,35 +142,14 @@ tox
 ```
 
 ### TODO
-* Documentation (0.9.0)
-  * Better README
-  * Better docstrings
-  * Examples
-    * Plugins
-    * Additional metadata
-    * Subclassing Client/Service
-    * Multiple versions
-* Plugins (1.0.0)
-  * Caching
-  * Auth[N/Z] + Whitelisting
-  * Logging
-  * Throttling
-  * SqlAlchemy
-  * Structures
-  * Redaction
-  * Patching
-  * Function unpacking decoration
-
-# API
-
-### Client
-
-TODO
-
-### Service
-
-TODO
-
-### Plugins
-
-TODO
+* docs (0.9.0)
+  * README
+  * docstrings
+  * examples
+    * plugins
+    * metadata
+    * api versions
+* plugins (1.0.0)
+  * sqlalchemy
+  * structures
+  * chain logging
