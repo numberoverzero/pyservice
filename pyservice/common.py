@@ -27,7 +27,7 @@ def load_defaults(api):
 
 
 def construct_client_pattern(endpoint):
-    '''
+    """
     Build a format string that operation name can be substituted into,
     and store it in the given endpoint dictionary.
 
@@ -47,7 +47,7 @@ def construct_client_pattern(endpoint):
             pattern: /api/{operation},
             client_pattern: http://foohost:8888/api/{operation}
         }
-    '''
+    """
     fmt = "{scheme}://{host}:{port}{pattern}"
     try:
         endpoint["client_pattern"] = fmt.format(**endpoint)
@@ -57,7 +57,7 @@ def construct_client_pattern(endpoint):
 
 
 def construct_service_pattern(endpoint):
-    '''
+    """
     Build a regex for comparing environ['PATH_INFO'] to,
     and store it in the given endpoint dictionary.
 
@@ -77,7 +77,7 @@ def construct_service_pattern(endpoint):
             pattern: /api/{operation},
             service_pattern: re.compile('^/api/(?P<operation>[^/]+)/?$')
         }
-    '''
+    """
     # Replace {operation} so that we can route an incoming request
     # Ignore trailing slash - /foo/ and /foo are identical
     try:
@@ -111,7 +111,7 @@ class Container(dict):
 
     __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__
-    __missing__ = lambda s, k: None
+    __missing__ = lambda self, key: None
 
 
 class Context(Container):

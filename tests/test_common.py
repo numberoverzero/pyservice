@@ -1,4 +1,5 @@
 import pytest
+import ujson
 from pyservice import common
 
 
@@ -72,6 +73,39 @@ def test_construct_invalid_service_pattern():
         common.construct_service_pattern(endpoint)
 
 
-def test_container_missing():
+def test_deserialize_replaces_existing_keys():
+    ''' deserialize should replace any existing values when loading '''
+    container = {"key": "value"}
+    string = ujson.dumps({"key": "value2", "other": "value"})
+    common.deserialize(string, container)
+
+    assert container["key"] == "value2"
+    assert container["other"] == "value"
+
+
+def test_serialize_aliases_dumps():
+    ''' serialize is an alias for `dumps` to mirror deserialize '''
+    container = {"key": "value"}
+    same_container = ujson.loads(common.serialize(container))
+    assert container == same_container
+
+
+def test_container_get():
+    ''' Container.foo aliases Container["foo"] '''
     container = common.Container()
-    assert container.missing is None
+    container["foo"] = object()
+    assert container.foo is container["foo"]
+
+
+def test_container_set():
+    ''' Container.foo aliases Container["foo"] '''
+    container = common.Container()
+    container.foo = object()
+    assert container.foo is container["foo"]
+
+
+def test_container_missing():
+    ''' missing keys return None, and are not persisted '''
+    container = common.Container()
+    assert container.missing_key is None
+    assert "missing_key" not in container
