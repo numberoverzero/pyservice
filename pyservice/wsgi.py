@@ -1,6 +1,5 @@
 import http.client
 import io
-import tempfile
 
 
 class setter(object):
@@ -17,6 +16,7 @@ class RequestException(Exception):
     def __init__(self, status):
         self.status = status
 
+LENGTH_REQUIRED = RequestException(411)
 REQUEST_TOO_LARGE = RequestException(413)
 BAD_CHUNKED_BODY = RequestException(400)
 INTERNAL_ERROR = RequestException(500)
@@ -155,11 +155,10 @@ def load_body(environ):
     clen = content_length(environ)
     if clen > MEMFILE_MAX:
         raise REQUEST_TOO_LARGE
+    # Chunked requests MUST NOT specify CONTENT_LENGTH.
     if clen < 0:
         clen = MEMFILE_MAX + 1
     data = _body(environ).read(clen)
-    if len(data) > MEMFILE_MAX:
-        raise REQUEST_TOO_LARGE
     return data.decode("UTF-8")
 
 
@@ -170,18 +169,17 @@ def _body(environ):
         # If there's no input we don't need to do any chunking, etc
         environ['wsgi.input'] = io.BytesIO()
         return environ['wsgi.input']
+    finally:
+        # Regardless, start at the beginning of the stream
+        # Perhaps this is the second time we've read the body?
+        environ['wsgi.input'].seek(0)
     chunked = chunked_body(environ)
     body_iter = _iter_chunked if chunked else _iter_body
     try:
-        body, body_size, is_temp_file = io.BytesIO(), 0, False
+        body, body_size = io.BytesIO(), 0
         for part in body_iter(read_func, MEMFILE_MAX, environ):
             body.write(part)
             body_size += len(part)
-            if not is_temp_file and body_size > MEMFILE_MAX:
-                body, tmp = tempfile.TemporaryFile(mode='w+b'), body
-                body.write(tmp.getvalue())
-                del tmp
-                is_temp_file = True
         environ['wsgi.input'] = body
         body.seek(0)
         return body
@@ -194,6 +192,9 @@ def _body(environ):
 def _iter_body(read, bufsize, environ):
     clen = content_length(environ)
     maxread = max(0, clen)
+    # At this point, we can bail on a negative clen, since it's not chunked
+    if clen < 0:
+        raise LENGTH_REQUIRED
     while maxread:
         part = read(min(maxread, bufsize))
         if not part:
