@@ -1,15 +1,15 @@
 import functools
 import requests
-
 from . import common
 from . import wsgi
 
 
 class Client(object):
     def __init__(self, **api):
-        common.update_missing(common.DEFAULT_API, api)
-        compute_uri(api)
         self.api = api
+        common.load_defaults(api)
+        # Inserts format string at api["endpoint"]["client_pattern"]
+        common.construct_client_pattern(api["endpoint"])
 
         self.plugins = []
         self.exceptions = common.ExceptionFactory()
@@ -65,7 +65,8 @@ class ClientProcessor(object):
     def remote_call(self):
         self.request_body = common.serialize(self.request)
 
-        uri = self.client.api["uri"].format(operation=self.operation)
+        pattern = self.client.api["endpoint"]["client_pattern"]
+        uri = pattern.format(operation=self.operation)
         data = self.request_body
         timeout = self.client.api["timeout"]
         response = requests.post(uri, data=data, timeout=timeout)
@@ -95,8 +96,3 @@ class ClientProcessor(object):
         args = exception["args"]
         exception = getattr(self.client.exceptions, name)(*args)
         raise exception
-
-
-def compute_uri(api):
-    uri = "{scheme}://{host}:{port}{path}".format(**api["endpoint"])
-    api["uri"] = uri.format(operation="{operation}", **api)

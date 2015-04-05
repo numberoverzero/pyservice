@@ -1,20 +1,14 @@
-import re
-import logging
-
 from . import common
 from . import wsgi
-
-logger = logging.getLogger(__name__)
 
 
 class Service(object):
     def __init__(self, **api):
-        common.update_missing(common.DEFAULT_API, api)
-        compute_uri(api)
         self.api = api
-        self.pattern = build_pattern(self.api["uri"])
+        common.load_defaults(api)
+        # Inserts regex at api["endpoint"]["service_pattern"]
+        common.construct_service_pattern(api["endpoint"])
 
-        # TODO: Add operation filtering
         self.plugins = {
             "request": [],
             "operation": []
@@ -49,7 +43,6 @@ class Service(object):
             response.body = processor.execute()
         # service should be serializing interal exceptions
         except Exception as exception:
-            logger.debug("Exception during wsgi call", exc_info=exception)
             # Defined failure case -
             # invalid body, unknown path/operation
             if isinstance(exception, wsgi.RequestException):
@@ -129,19 +122,3 @@ class ServiceProcessor(object):
             "args": args
         }
         self.response_body = common.serialize(self.response)
-
-
-def build_pattern(string):
-    '''
-    string is a python format string with version and operation keys.
-    For example: "/api/v1/{operation}"
-    '''
-    # Replace {operation} so that we can route an incoming request
-    string = string.format(operation="(?P<operation>[^/]+)")
-    # Ignore trailing slash, match exact string only
-    return re.compile("^{}/?$".format(string))
-
-
-def compute_uri(api):
-    uri = api["endpoint"]["path"]
-    api["uri"] = uri.format(operation="{operation}", **api)

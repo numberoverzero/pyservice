@@ -1,4 +1,6 @@
 import builtins
+import copy
+import re
 import ujson
 
 
@@ -7,20 +9,76 @@ DEFAULT_API = {
     "timeout": 3,
     "debug": False,
     "endpoint": {
-        "scheme": "https",
+        "scheme": "http",
+        "pattern": "/api/{operation}",
         "host": "localhost",
-        "port": 8080,
-        "path": "/api/{version}/{operation}"
+        "port": 8080
     },
     "operations": [],
     "exceptions": []
 }
 
 
-def update_missing(src, dst):
-    """Like `dict.update` but existing keys are not overwritten"""
-    for key, value in src.items():
-        dst[key] = dst.get(key, value)
+def load_defaults(api):
+    """ Update the given api (nested dict) with any missing values """
+    default = copy.deepcopy(DEFAULT_API)
+    for key, default_value in default.items():
+        api[key] = api.get(key, default_value)
+
+
+def construct_client_pattern(endpoint):
+    '''
+    Build a format string that operation name can be substituted into,
+    and store it in the given endpoint dictionary.
+
+    Input:
+        {
+            scheme: http,
+            host: foohost,
+            port: 8888,
+            pattern: /api/{operation}
+        }
+
+    Output:
+        {
+            scheme: http,
+            host: foohost,
+            port: 8888,
+            pattern: /api/{operation},
+            client_pattern: http://foohost:8888/api/{operation}
+        }
+    '''
+    fmt = "{scheme}://{host}:{port}{pattern}"
+    endpoint["client_pattern"] = fmt.format(**endpoint)
+
+
+def construct_service_pattern(endpoint):
+    '''
+    Build a regex for comparing environ['PATH_INFO'] to,
+    and store it in the given endpoint dictionary.
+
+    Input:
+        {
+            scheme: http,
+            host: foohost,
+            port: 8888,
+            pattern: /api/{operation}
+        }
+
+    Output:
+        {
+            scheme: http,
+            host: foohost,
+            port: 8888,
+            pattern: /api/{operation},
+            service_pattern: re.compile('^/api/(?P<operation>[^/]+)/?$')
+        }
+    '''
+    # Replace {operation} so that we can route an incoming request
+    # Ignore trailing slash - /foo/ and /foo are identical
+    pattern = endpoint["pattern"].format(operation="(?P<operation>[^/]+)")
+    operation_regex = re.compile("^{}/?$".format(pattern))
+    endpoint["service_pattern"] = operation_regex
 
 
 def deserialize(string, container):

@@ -63,7 +63,7 @@ class Request(object):
     @property
     def operation(self):
         path = self.environ['PATH_INFO']
-        match = self.service.pattern.search(path)
+        match = self.service.api["endpoint"]["service_pattern"].search(path)
         if not match:
             raise UNKNOWN_OPERATION
         operation = match.groupdict()["operation"]
