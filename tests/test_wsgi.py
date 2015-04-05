@@ -111,3 +111,39 @@ def test_set_response_unicode(start_response):
 
     response_body = response.send()[0]
     assert response_body == b'\xe0\xb2\xa0_\xe0\xb2\xa0'
+
+
+def test_content_length_not_specified():
+    ''' By default content length should be -1 '''
+    environ = {}
+    assert wsgi.content_length(environ) == -1
+
+
+def test_content_length_returns_int():
+    ''' CONTENT_LENGTH is converted to an int '''
+    environ = {"CONTENT_LENGTH": "5"}
+    assert wsgi.content_length(environ) == 5
+
+
+def test_chunked_body_missing():
+    ''' By default chunked is False '''
+    environ = {}
+    assert not wsgi.chunked_body(environ)
+
+
+def test_body_not_chunked():
+    ''' Non-empty body that doesn't include 'chunked' '''
+    environ = {"HTTP_TRANSFER_ENCODING": "utf8"}
+    assert not wsgi.chunked_body(environ)
+
+
+def test_chunked_body_ignores_case():
+    ''' chunked is equivalent to CHUNKED '''
+    environ = {"HTTP_TRANSFER_ENCODING": "CHUNKed"}
+    assert wsgi.chunked_body(environ)
+
+
+def test_chunked_body_matches_any_substr():
+    ''' chunked can appear anywhere in the encoding '''
+    environ = {"HTTP_TRANSFER_ENCODING": "this is chunked?! ಠ_ಠ"}
+    assert wsgi.chunked_body(environ)

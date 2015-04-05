@@ -142,10 +142,12 @@ class Response(object):
 
 
 def content_length(environ):
-    return int(environ.get('CONTENT_LENGTH') or -1)
+    """ Returns the content length, or -1 if none is provided """
+    return int(environ.get('CONTENT_LENGTH', -1))
 
 
 def chunked_body(environ):
+    """ Returns True if the transfer encoding contains the word 'chunked' """
     return "chunked" in environ.get('HTTP_TRANSFER_ENCODING', '').lower()
 
 
