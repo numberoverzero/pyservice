@@ -128,3 +128,46 @@ def test_container_missing():
     container = common.Container()
     assert container.missing_key is None
     assert "missing_key" not in container
+
+
+def test_context_calls_processor():
+    ''' context.process_request continues processing '''
+    class Processor:
+        def __init__(self):
+            self.calls = 0
+
+        def continue_execution(self):
+            self.calls += 1
+
+    processor = Processor()
+    context = common.Context(processor)
+    context.process_request()
+    context.process_request()
+    assert processor.calls == 2
+
+
+def test_exception_factory_consistent_values():
+    ''' exception classes must be the same class object every call '''
+    factory = common.ExceptionFactory()
+    assert factory.BadFoo is factory.BadFoo
+
+
+def test_exception_factory_defers_to_builtins():
+    ''' builtin exceptions are returned directly, not shadowed '''
+    factory = common.ExceptionFactory()
+    assert factory.ValueError is ValueError
+
+
+def test_exception_factory_caches_attributes():
+    ''' getattr should never be called twice for the same exception class '''
+    calls = 0
+
+    class Observer(common.ExceptionFactory):
+        def __getattr__(self, name):
+            nonlocal calls
+            calls += 1
+            return super().__getattr__(name)
+
+    factory = Observer()
+    assert factory.FooException is factory.FooException
+    assert calls == 1

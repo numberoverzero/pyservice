@@ -121,7 +121,7 @@ class Container(dict):
         return None
 
 
-class Context(Container):
+class Context:
     """
     Available during requests, provides a dumping ground for plugins to
     store objects, such as database handles or shared caches.
@@ -131,6 +131,7 @@ class Context(Container):
     operation - (string) name of the current operation
     client - (Client) only available during the client portion of a request
     service - (Service) only available during the service portion of a request
+
 
     Plugins can execute code before and after the rest of the request is
     executed.  To continue processing the request, use
@@ -161,27 +162,20 @@ class ExceptionFactory(object):
     Constructed classes are cached to keep types consistent across calls.
     >>> ex = ExceptionFactory()
     >>> ex.BadFoo is ex.BadFoo
+    >>> ex.ValueError is ValueError
     """
-    def __init__(self):
-        self.classes = {}
 
-    def build_exception_class(self, name):
-        self.classes[name] = type(name, (Exception,), {})
-        return self.classes[name]
-
-    def get_class(self, name):
-        # Check builtins for real exception class
-        cls = getattr(builtins, name, None)
-        # Cached?
-        if not cls:
-            cls = self.classes.get(name, None)
-        # Cache
-        if not cls:
-            cls = self.build_exception_class(name)
-        return cls
-
-    def exception(self, name, *args):
-        return self.get_class(name)(*args)
+    def __build__(self, name):
+        return type(name, (Exception,), {})
 
     def __getattr__(self, name):
-        return self.get_class(name)
+        # Check builtins for real exception class
+        cls = getattr(builtins, name, None)
+
+        # Not builtin, create the class
+        cls = cls or self.__build__(name)
+
+        # Cache the result so we skip the getattr overhead next time
+        setattr(self, name, cls)
+
+        return cls
