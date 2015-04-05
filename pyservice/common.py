@@ -49,7 +49,11 @@ def construct_client_pattern(endpoint):
         }
     '''
     fmt = "{scheme}://{host}:{port}{pattern}"
-    endpoint["client_pattern"] = fmt.format(**endpoint)
+    try:
+        endpoint["client_pattern"] = fmt.format(**endpoint)
+    except KeyError as exception:
+        missing_key = exception.args[0]
+        raise ValueError("endpoint must specify '{}'".format(missing_key))
 
 
 def construct_service_pattern(endpoint):
@@ -76,7 +80,10 @@ def construct_service_pattern(endpoint):
     '''
     # Replace {operation} so that we can route an incoming request
     # Ignore trailing slash - /foo/ and /foo are identical
-    pattern = endpoint["pattern"].format(operation="(?P<operation>[^/]+)")
+    try:
+        pattern = endpoint["pattern"].format(operation="(?P<operation>[^/]+)")
+    except KeyError:
+        raise ValueError("endpoint must specify 'pattern'")
     operation_regex = re.compile("^{}/?$".format(pattern))
     endpoint["service_pattern"] = operation_regex
 
