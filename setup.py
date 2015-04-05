@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 
 setup(
@@ -9,8 +9,7 @@ setup(
     author='Joe Cross',
     author_email='joe.mcross@gmail.com',
     url='http://github.com/numberoverzero/pyservice/',
-    py_modules=['pyservice'],
-    packages=['pyservice'],
+    packages=find_packages(exclude=('tests', 'examples')),
     install_requires=['requests', 'ujson'],
     license='MIT',
     platforms='any',
