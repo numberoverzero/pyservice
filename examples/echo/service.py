@@ -1,8 +1,7 @@
 from examples import load_api
 import pyservice
 
-api = load_api('echo/api.json')
-service = pyservice.Service(**api)
+service = pyservice.Service(**load_api('echo/api.json'))
 
 
 @service.operation("greet")
@@ -51,7 +50,8 @@ def main():
     # using http because wsgiref doesn't support TLS
     from wsgiref.simple_server import make_server
 
-    host, port = api["endpoint"]["host"], api["endpoint"]["port"]
+    host = service.api["endpoint"]["host"]
+    port = service.api["endpoint"]["port"]
     httpd = make_server(host, port, service.wsgi_application)
     httpd.serve_forever()
 

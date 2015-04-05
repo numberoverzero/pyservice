@@ -1,11 +1,13 @@
 {
+    "version": "0.1",
+    "timeout": 5,
+
     "endpoint": {
         "scheme": "http",
+        "pattern": "/api/{operation}",
         "host": "localhost",
-        "port": 8080,
-        "path": "/api/{version}/{operation}"
+        "port": 8080
     },
-    "timeout": 5,
 
     "operations": {
         "greet": {
@@ -13,12 +15,14 @@
             "output": ["greeting", "question"],
             "exceptions": ["InvalidName", "InvalidCity"]
         },
+
         "echo": {
             "input": ["value"],
             "output": ["value"],
             "exceptions": ["Unauthorized"]
         }
     },
+
     "exceptions": [
         "InvalidName",
         "InvalidCity",
