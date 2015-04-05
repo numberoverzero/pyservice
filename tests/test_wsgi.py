@@ -33,6 +33,14 @@ def start_response():
     return func
 
 
+def with_body(string, length):
+    ''' Return an environ with an appropriate bytes stream and given size '''
+    return {
+        'CONTENT_LENGTH': str(length),
+        'wsgi.input': io.BytesIO(bytes(string, 'utf8'))
+    }
+
+
 def test_request_known_operation(service):
     '''
     Correctly matches against PATH_INFO and validates operation is in service
@@ -60,10 +68,7 @@ def test_request_bad_path(service):
 
 def test_request_caches_body(service, observe):
     ''' Request.body caches load_body result '''
-    environ = {
-        "CONTENT_LENGTH": "4",
-        "wsgi.input": io.BytesIO(b"Body")
-    }
+    environ = with_body("Body", 4)
     request = wsgi.Request(service, environ)
 
     # patch wsgi.load_body so we can watch call count
@@ -168,16 +173,13 @@ def test_chunked_body_matches_any_substr():
 
 def test_load_body_max_size():
     ''' load_body raises when CONTENT_LENGTH is too large '''
-    environ = {"CONTENT_LENGTH": wsgi.MEMFILE_MAX + 1}
+    environ = with_body("", wsgi.MEMFILE_MAX + 1)
     with pytest.raises(wsgi.RequestException):
         wsgi.load_body(environ)
 
 
 def test_load_body_no_length_header():
-    '''
-    load_body raises when CONTENT_LENGTH is missing
-    and HTTP_TRANSFER_ENCODING isn't chunked
-    '''
+    ''' load_body raises when CONTENT_LENGTH is missing '''
     environ = {
         "wsgi.input": io.BytesIO(b"None of this will be returned")
     }
@@ -185,32 +187,23 @@ def test_load_body_no_length_header():
         wsgi.load_body(environ)
 
 
-def test_load_partial_buffer():
+def test_load_body_partial_buffer():
     ''' don't load more than CONTENT_LENGTH bytes '''
-    environ = {
-        "wsgi.input": io.BytesIO(b"Only this|None of this"),
-        "CONTENT_LENGTH": "9"
-    }
+    environ = with_body("Only this|None of this", 9)
     body = wsgi.load_body(environ)
     assert body == "Only this"
 
 
-def test_load_extra_buffer():
+def test_load_body_extra_buffer():
     ''' don't read past the available buffer '''
-    environ = {
-        "wsgi.input": io.BytesIO(b"Only this"),
-        "CONTENT_LENGTH": wsgi.MEMFILE_MAX
-    }
+    environ = with_body("Only this", wsgi.MEMFILE_MAX)
     body = wsgi.load_body(environ)
     assert body == "Only this"
 
 
 def test_load_body_not_reentrant():
     ''' wsgi.input is consumed on read'''
-    environ = {
-        "wsgi.input": io.BytesIO(b"Only this"),
-        "CONTENT_LENGTH": "9"
-    }
+    environ = with_body("Only this", 9)
     body = wsgi.load_body(environ)
     different_body = wsgi.load_body(environ)
     assert body == "Only this"
@@ -220,40 +213,12 @@ def test_load_body_not_reentrant():
 def test_load_body_no_input():
     ''' load_body returns an empty string when wsgi.input is missing '''
     environ = {"CONTENT_LENGTH": "100"}
-    assert not wsgi.load_body(environ)
+    assert wsgi.load_body(environ) == ''
 
 
-def test_load_empty_chunked_body():
-    ''' load an empty chunked body '''
-    environ = {
-        "wsgi.input": io.BytesIO(b"0\r\n"),
-        "HTTP_TRANSFER_ENCODING": "chunked"
-    }
-    assert wsgi.load_body(environ) == ""
-
-
-def test_load_chunked_body_multiple_chunks():
-    ''' load a chunked body in two chunks'''
-    environ = {
-        "wsgi.input": io.BytesIO(b"1\r\na\r\n2\r\nbb\r\n0\r\n"),
-        "HTTP_TRANSFER_ENCODING": "chunked"
-    }
-    assert wsgi.load_body(environ) == "abb"
-
-
-def test_load_chunked_body_not_terminated():
-    ''' various invalid chunked bodies'''
-    invalid_bodies = [
-        b"1\r\n",  # Not terminated with 0\r\n
-        b"1",      # Missing \r\n and 0\r\n
-        b"j\r\n",  # Illegal header size character
-        b"1\r\n0",  # Missing \r\n
-        bytes("f"*(wsgi.MEMFILE_MAX + 1) + "\r\n", 'utf8')  # Header too large
-    ]
-    for invalid_body in invalid_bodies:
-        environ = {
-            "wsgi.input": io.BytesIO(invalid_body),
-            "HTTP_TRANSFER_ENCODING": "chunked"
-        }
-        with pytest.raises(wsgi.RequestException):
-            wsgi.load_body(environ)
+def test_load_chunked_body_raises():
+    ''' chunked encoding isn't supported '''
+    environ = with_body("Hello", 100)
+    environ["HTTP_TRANSFER_ENCODING"] = "chunked"
+    with pytest.raises(wsgi.RequestException):
+        wsgi.load_body(environ)

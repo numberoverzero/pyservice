@@ -1,5 +1,4 @@
 import http.client
-import io
 
 
 class setter(object):
@@ -19,7 +18,6 @@ class RequestException(Exception):
 MISSING = object()
 LENGTH_REQUIRED = RequestException(411)
 REQUEST_TOO_LARGE = RequestException(413)
-BAD_CHUNKED_BODY = RequestException(400)
 INTERNAL_ERROR = RequestException(500)
 UNKNOWN_OPERATION = RequestException(404)
 HTTP_CODES = {i[0]: "{} {}".format(*i) for i in http.client.responses.items()}
@@ -157,78 +155,13 @@ def chunked_body(environ):
 
 def load_body(environ):
     clen = content_length(environ)
+    if chunked_body(environ) or clen < 0:
+        raise LENGTH_REQUIRED
     if clen > MEMFILE_MAX:
         raise REQUEST_TOO_LARGE
-    # Chunked requests MUST NOT specify CONTENT_LENGTH.
-    if clen < 0:
-        clen = MEMFILE_MAX + 1
-    data = _body(environ).read(clen)
-    return data.decode("UTF-8")
-
-
-def _body(environ):
     try:
-        read_func = environ['wsgi.input'].read
+        data = environ['wsgi.input'].read(clen)
+        return data.decode("UTF-8")
     except KeyError:
-        # If there's no input we don't need to do any chunking, etc
-        environ['wsgi.input'] = io.BytesIO()
-        return environ['wsgi.input']
-    chunked = chunked_body(environ)
-    body_iter = _iter_chunked if chunked else _iter_body
-    try:
-        body, body_size = io.BytesIO(), 0
-        for part in body_iter(read_func, MEMFILE_MAX, environ):
-            body.write(part)
-            body_size += len(part)
-        environ['wsgi.input'] = body
-        body.seek(0)
-        return body
-    except RequestException:
-        # Probably BAD_CHUNKED_BODY
-        body.close()
-        raise
-
-
-def _iter_body(read, bufsize, environ):
-    clen = content_length(environ)
-    maxread = max(0, clen)
-    # At this point, we can bail on a negative clen, since it's not chunked
-    if clen < 0:
-        raise LENGTH_REQUIRED
-    while maxread:
-        part = read(min(maxread, bufsize))
-        if not part:
-            break
-        yield part
-        maxread -= len(part)
-
-
-def _iter_chunked(read, bufsize, environ):
-    rn, sem, bs = b'\r\n', b';', b''
-    while True:
-        header = read(1)
-        while header[-2:] != rn:
-            c = read(1)
-            header += c
-            if not c:
-                raise BAD_CHUNKED_BODY
-            if len(header) > bufsize:
-                raise BAD_CHUNKED_BODY
-        size, _, _ = header.partition(sem)
-        try:
-            maxread = int(size.strip(), 16)
-        except ValueError:
-            raise BAD_CHUNKED_BODY
-        if maxread == 0:
-            break
-        buff = bs
-        while maxread > 0:
-            if not buff:
-                buff = read(min(maxread, bufsize))
-            part, buff = buff[:maxread], buff[maxread:]
-            if not part:
-                raise BAD_CHUNKED_BODY
-            yield part
-            maxread -= len(part)
-        if read(2) != rn:
-            raise BAD_CHUNKED_BODY
+        # wsgi.input is missing, return empty string
+        return ""
