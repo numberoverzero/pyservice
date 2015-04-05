@@ -1,4 +1,35 @@
 import pytest
+import pyservice
+
+
+@pytest.fixture
+def api():
+    ''' Very Simple API - no operations '''
+    return {
+        "endpoint": {
+            "scheme": "http",
+            "pattern": "/test/{operation}",
+            "host": "localhost",
+            "port": 8080
+        },
+        "operations": ["foo"]
+    }
+
+
+@pytest.fixture
+def service(api):
+    ''' Return a service with a simple api '''
+    return pyservice.Service(**api)
+
+
+@pytest.fixture
+def start_response():
+    ''' Function that stores status, headers on itself '''
+    def func(status, headers):
+        self.status = status
+        self.headers = headers
+    self = func
+    return func
 
 
 @pytest.fixture
