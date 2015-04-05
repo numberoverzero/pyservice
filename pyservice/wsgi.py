@@ -3,13 +3,13 @@ import io
 import tempfile
 
 
-class write_only(object):
+class setter(object):
     """ Write-only property. """
     def __init__(self, func):
         self.func = func
 
     def __set__(self, obj, value):
-        self.func(obj, value)
+        return self.func(obj, value)
 
 
 class RequestException(Exception):
@@ -118,11 +118,11 @@ class Response(object):
         self.status = exc.status
         self.body = ''
 
-    @write_only
+    @setter
     def status(self, value):
         self._status = HTTP_CODES[value]
 
-    @write_only
+    @setter
     def body(self, value):
         '''MUST be a unicode string.  MUST be empty for non-200 statuses'''
         if value:
