@@ -85,7 +85,7 @@ class Request(object):
         return operation
 
     @property
-    def body(self):
+    def body(self):  # pragma: no cover
         return load_body(self.environ)
 
 
