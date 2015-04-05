@@ -16,6 +16,7 @@ class RequestException(Exception):
     def __init__(self, status):
         self.status = status
 
+MISSING = object()
 LENGTH_REQUIRED = RequestException(411)
 REQUEST_TOO_LARGE = RequestException(413)
 BAD_CHUNKED_BODY = RequestException(400)
@@ -72,6 +73,7 @@ class Request(object):
     def __init__(self, service, environ):
         self.service = service
         self.environ = environ
+        self._body = MISSING
 
     @property
     def operation(self):
@@ -85,8 +87,10 @@ class Request(object):
         return operation
 
     @property
-    def body(self):  # pragma: no cover
-        return load_body(self.environ)
+    def body(self):
+        if self._body is MISSING:
+            self._body = load_body(self.environ)
+        return self._body
 
 
 class Response(object):
@@ -169,10 +173,6 @@ def _body(environ):
         # If there's no input we don't need to do any chunking, etc
         environ['wsgi.input'] = io.BytesIO()
         return environ['wsgi.input']
-    finally:
-        # Regardless, start at the beginning of the stream
-        # Perhaps this is the second time we've read the body?
-        environ['wsgi.input'].seek(0)
     chunked = chunked_body(environ)
     body_iter = _iter_chunked if chunked else _iter_body
     try:

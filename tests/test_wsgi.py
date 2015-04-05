@@ -30,7 +30,6 @@ def start_response():
         self.status = status
         self.headers = headers
     self = func
-
     return func
 
 
@@ -57,6 +56,23 @@ def test_request_bad_path(service):
     request = wsgi.Request(service, environ)
     with pytest.raises(wsgi.RequestException):
         request.operation
+
+
+def test_request_caches_body(service, observe):
+    ''' Request.body caches load_body result '''
+    environ = {
+        "CONTENT_LENGTH": "4",
+        "wsgi.input": io.BytesIO(b"Body")
+    }
+    request = wsgi.Request(service, environ)
+
+    # patch wsgi.load_body so we can watch call count
+    observer = observe(wsgi, "load_body")
+
+    request.body
+    request.body
+
+    assert len(observer.calls) == 1
 
 
 def test_default_response(start_response):
@@ -189,16 +205,16 @@ def test_load_extra_buffer():
     assert body == "Only this"
 
 
-def test_load_body_reentrant():
-    ''' call load_body multiple times '''
+def test_load_body_not_reentrant():
+    ''' wsgi.input is consumed on read'''
     environ = {
         "wsgi.input": io.BytesIO(b"Only this"),
         "CONTENT_LENGTH": "9"
     }
     body = wsgi.load_body(environ)
-    same_body = wsgi.load_body(environ)
+    different_body = wsgi.load_body(environ)
     assert body == "Only this"
-    assert body == same_body
+    assert different_body == ""
 
 
 def test_load_body_no_input():
