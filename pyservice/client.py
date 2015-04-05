@@ -31,10 +31,13 @@ class Client(object):
 class ClientProcessor(object):
     def __init__(self, client, operation, request):
         self.client = client
+        # Don't rely on context's operation to be immutable
         self.operation = operation
 
-        self.context = common.Context(operation, self)
+        self.context = common.Context(self)
+        self.context.operation = operation
         self.context.client = client
+
         self.request = common.Container()
         self.request.update(request)
         self.request_body = None

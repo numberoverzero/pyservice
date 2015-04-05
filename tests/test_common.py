@@ -90,6 +90,25 @@ def test_serialize_aliases_dumps():
     assert container == same_container
 
 
+def test_serialize_container():
+    ''' serialize should work on containers '''
+    container = common.Container()
+    container.foo = "bar"
+
+    same_container = ujson.loads(common.serialize(container))
+    assert container == same_container
+
+
+def test_container_clobbers_dict_methods():
+    ''' No respect for existing methods on dicts '''
+    container = common.Container()
+    real_keys_method = container.keys
+
+    container.keys = "Now it's a string"
+    assert container.keys is not real_keys_method
+    assert container.keys == "Now it's a string"
+
+
 def test_container_get():
     ''' Container.foo aliases Container["foo"] '''
     container = common.Container()

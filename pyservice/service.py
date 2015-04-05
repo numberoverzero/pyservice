@@ -57,10 +57,13 @@ class Service(object):
 class ServiceProcessor(object):
     def __init__(self, service, operation, request_body):
         self.service = service
+        # Don't rely on context's operation to be immutable
         self.operation = operation
 
-        self.context = common.Context(operation, self)
+        self.context = common.Context(self)
+        self.context.operation = operation
         self.context.service = service
+
         self.request = common.Container()
         self.request_body = request_body
         self.response = common.Container()
@@ -74,9 +77,9 @@ class ServiceProcessor(object):
             raise ValueError("Already processed request")
         try:
             self.continue_execution()
-            return self.response_body
         except Exception as exception:
             self.raise_exception(exception)
+        finally:
             return self.response_body
 
     def continue_execution(self):

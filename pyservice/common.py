@@ -100,18 +100,25 @@ def serialize(container):
 
 class Container(dict):
     """
-    Allows attribute access to members, as well as index access.  Missing keys
-    return None - missing values are not populated.
+    Enable attribute access to dict keys.
+
+    Missing keys return None, and are not persisted.
+    dict methods can be overwritten (container.keys = "foo" is fine)
 
     >>> o = object()
     >>> c = Container()
-    >>> c.key = o
-    >>> assert c["key"] is c.key
+    >>> c.keys = o
+    >>> assert c["keys"] is c.keys
     """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # For more info on this magic: http://stackoverflow.com/a/14620633
+        self.__dict__ = self
 
-    __getattr__ = dict.__getitem__
-    __setattr__ = dict.__setitem__
-    __missing__ = lambda self, key: None
+    def __getattr__(self, key):
+        # We can't use __missing__ here because the `__dict__ = self`
+        # above will cause KeyErrors and never call __missing__.
+        return None
 
 
 class Context(Container):
@@ -119,17 +126,30 @@ class Context(Container):
     Available during requests, provides a dumping ground for plugins to
     store objects, such as database handles or shared caches.
 
+    Attributes:
+
+    operation - (string) name of the current operation
+    client - (Client) only available during the client portion of a request
+    service - (Service) only available during the service portion of a request
+
     Plugins can execute code before and after the rest of the request is
     executed.  To continue processing the request, use
-    `context.process_request()`.  This MUST NOT be called more than once in
-    a single plugin.  To discontinue processing the request (ie. for caching)
+        `context.process_request()`.
+    This MUST NOT be called more than once in a single plugin.
+    To discontinue processing the request (ie. for caching)
     simply do not invoke `process_request()`.
     """
-    def __init__(self, operation, processor):
-        self.operation = operation
+    def __init__(self, processor):
         self.__processor__ = processor
 
     def process_request(self):
+        """
+        Continue processing the request.
+
+        Either invokes the next plugin or hands the request off to the
+        remote endpoint (client context) or the underlying function
+        (service context)
+        """
         self.__processor__.continue_execution()
 
 
