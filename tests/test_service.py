@@ -72,6 +72,7 @@ def test_plugin_binding(service):
 
 
 def test_service_unknown_decorator(service):
+    ''' Throw when the operation name isn't in the api '''
     with pytest.raises(ValueError):
         service.operation("unknown operation")
 
@@ -93,7 +94,11 @@ def test_operation_binding(service):
 
 
 def test_wsgi_application(service, environment, start_response):
-
+    '''
+    process has the correct args
+    body is serialized
+    headers are correct
+    '''
     body = "body"
     return_value = "Hello, World!"
     process_args = []
@@ -113,3 +118,33 @@ def test_wsgi_application(service, environment, start_response):
     assert start_response.status == '200 OK'
     assert start_response.headers == [('Content-Length',
                                        str(len(return_value)))]
+
+
+def test_wsgi_unknown_operation(service, environment, start_response):
+    ''' Response is 404 when operation is unknown '''
+    def process(*args):
+        return "Not Used"
+    service.__process__ = process
+
+    environ = environment("", 0)
+    environ["PATH_INFO"] = "/test/not_an_operation"
+
+    result = service.wsgi_application(environ, start_response)
+    assert result == [b'']
+    assert start_response.status == '404 Not Found'
+    assert start_response.headers == [('Content-Length', '0')]
+
+
+def test_wsgi_unknown_exception(service, environment, start_response):
+    ''' Response is 500 Internal Error when unexpected exception occurrs '''
+    def process(*args):
+        raise RuntimeError("Unexpected")
+    service.__process__ = process
+
+    environ = environment("", 0)
+    environ["PATH_INFO"] = "/test/foo"
+
+    result = service.wsgi_application(environ, start_response)
+    assert result == [b'']
+    assert start_response.status == '500 Internal Server Error'
+    assert start_response.headers == [('Content-Length', '0')]
