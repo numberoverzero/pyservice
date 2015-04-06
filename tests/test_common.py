@@ -131,12 +131,12 @@ def test_container_missing():
 
 
 def test_context_calls_processor():
-    ''' context.process_request continues processing '''
+    ''' context.process_request delegates to its processor '''
     class Processor:
         def __init__(self):
             self.calls = 0
 
-        def continue_execution(self):
+        def process_request(self):
             self.calls += 1
 
     processor = Processor()

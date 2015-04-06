@@ -140,8 +140,8 @@ class Context:
     To discontinue processing the request (ie. for caching)
     simply do not invoke `process_request()`.
     """
-    def __init__(self, processor):
-        self.__processor__ = processor
+    def __init__(self, process):
+        self.__process__ = process
 
     def process_request(self):
         """
@@ -151,7 +151,7 @@ class Context:
         remote endpoint (client context) or the underlying function
         (service context)
         """
-        self.__processor__.continue_execution()
+        self.__process__.process_request()
 
 
 class ExceptionFactory(object):
