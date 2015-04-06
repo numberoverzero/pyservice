@@ -1,10 +1,13 @@
 from . import common
-from . import processor
+from . import processors
 from . import wsgi
 
 
 class Service(object):
-    __proc__ = processor.ServiceProcessor
+    # Processor class to use when handling WSGI operations.
+    # Invoked as:
+    #   response = __process__(service, operation, body)()
+    __process__ = processors.service
 
     def __init__(self, **api):
         self.api = api
@@ -38,21 +41,19 @@ class Service(object):
         return func
 
     def wsgi_application(self, environ, start_response):
-        # No validation until we ask for operation or body
-        request = wsgi.Request(self, environ)
-        response = wsgi.Response(start_response)
+        # environ isn't validated until we ask for operation or body
+        req = wsgi.Request(self, environ)
+        resp = wsgi.Response(start_response)
 
         try:
-            process = self.__proc__(self, request.operation, request.body)
-            response.body = process()
-        # service should be serializing interal exceptions
+            resp.body = self.__process__(self, req.operation, req.body)
         except Exception as exception:
             # Defined failure case -
             # invalid body, unknown path/operation
             if isinstance(exception, wsgi.RequestException):
-                response.exception(exception)
-            # Unexpected failure type
+                resp.exception(exception)
+            # Unexpected failure type - don't propagate to consumers
             else:
-                response.exception(wsgi.INTERNAL_ERROR)
+                resp.exception(wsgi.INTERNAL_ERROR)
         finally:
-            return response.send()
+            return resp.send()

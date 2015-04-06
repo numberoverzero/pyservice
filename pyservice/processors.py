@@ -6,8 +6,20 @@ from . import common
 from . import wsgi
 
 
+def service(service, operation, request_body):
+    process = ServiceProcessor(service, operation, request_body)
+    return process()
+
+
 class ServiceProcessor(object):
     def __init__(self, service, operation, request_body):
+        """
+        A python class with __init__ and 1 or 2 functions is usually an
+        anti-pattern, but in this case we're using it to simplify the
+        chaining contract for plugin authors.  This allows them to
+        use context.process_request() without managing the state to pass
+        to the next plugin, or in any way knowing if there is another plugin
+        """
         self.service = service
         # Don't rely on context's operation to be immutable
         self.operation = operation

@@ -90,3 +90,26 @@ def test_operation_binding(service):
 
     assert operation is service.functions['foo']
     assert another_operation is service.functions['bar']
+
+
+def test_wsgi_application(service, environment, start_response):
+
+    body = "body"
+    return_value = "Hello, World!"
+    process_args = []
+
+    def process(*args):
+        nonlocal process_args, return_value
+        process_args.extend(args)
+        return return_value
+    service.__process__ = process
+
+    environ = environment(body, len(body))
+    environ["PATH_INFO"] = "/test/foo"
+
+    result = service.wsgi_application(environ, start_response)
+    assert result == [bytes(return_value, 'utf8')]
+    assert process_args == [service, "foo", body]
+    assert start_response.status == '200 OK'
+    assert start_response.headers == [('Content-Length',
+                                       str(len(return_value)))]
