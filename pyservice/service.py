@@ -6,7 +6,7 @@ from . import wsgi
 class Service(object):
     # Processor class to use when handling WSGI operations.
     # Invoked as:
-    #   response = __process__(service, operation, body)()
+    #   response = __process__(service, operation, body)
     __process__ = processors.service
 
     def __init__(self, **api):
@@ -46,7 +46,7 @@ class Service(object):
         resp = wsgi.Response(start_response)
 
         try:
-            resp.body = self.__process__(self, req.operation, req.body)
+            resp.body = self.__process__(req.operation, req.body)
         except Exception as exception:
             # Defined failure case -
             # invalid body, unknown path/operation
