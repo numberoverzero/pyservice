@@ -47,10 +47,6 @@ class Processor(object):
         }
         self.index = -1
 
-    @property
-    def result(self):
-        raise NotImplementedError("Subclasses must define result.")
-
     def __call__(self):
         """ Entry point for external callers """
         if self.state is None:
@@ -118,6 +114,9 @@ class Processor(object):
             else:
                 pass
 
+    def _execute(self):
+        raise NotImplementedError("Subclasses must implement _execute.")
+
     def before_state(self, state):
         ''' The state whose execution is about to begin '''
         pass
@@ -126,16 +125,16 @@ class Processor(object):
         ''' The state whose execution just finished '''
         pass
 
+    @property
+    def result(self):
+        raise NotImplementedError("Subclasses must define result.")
+
 
 class ClientProcessor(Processor):
     def __init__(self, client, operation, request):
         super().__init__(client, operation)
         self.context.client = client
         self.request.update(request)
-
-    @property
-    def result(self):
-        return self.response
 
     def _execute(self):
         '''
@@ -157,6 +156,10 @@ class ClientProcessor(Processor):
         self.response_body = response.text
         common.deserialize(self.response_body, self.response)
         self.handle_service_exception()
+
+    @property
+    def result(self):
+        return self.response
 
     def handle_http_error(self, response):
         if wsgi.is_request_exception(response):
@@ -201,6 +204,13 @@ class ServiceProcessor(Processor):
         finally:
             return self.result
 
+    def _execute(self):
+        '''
+        Invoke the service's function for the current operation
+        '''
+        func = self.obj.functions[self.operation]
+        func(self.request, self.response, self.context)
+
     def before_state(self, state):
         # Unpack request_body so it's available to operation scoped plugins
         if state == "operation":
@@ -216,13 +226,6 @@ class ServiceProcessor(Processor):
     @property
     def result(self):
         return self.response_body
-
-    def _execute(self):
-        '''
-        Invoke the service's function for the current operation
-        '''
-        func = self.obj.functions[self.operation]
-        func(self.request, self.response, self.context)
 
     def raise_exception(self, exception):
         '''
