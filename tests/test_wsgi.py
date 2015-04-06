@@ -3,14 +3,6 @@ import pytest
 from pyservice import wsgi
 
 
-def with_body(string, length):
-    ''' Return an environ with an appropriate bytes stream and given size '''
-    return {
-        'CONTENT_LENGTH': str(length),
-        'wsgi.input': io.BytesIO(bytes(string, 'utf8'))
-    }
-
-
 def test_request_known_operation(service):
     '''
     Correctly matches against PATH_INFO and validates operation is in service
@@ -36,9 +28,9 @@ def test_request_bad_path(service):
         request.operation
 
 
-def test_request_caches_body(service, observe):
+def test_request_caches_body(service, observe, environment):
     ''' Request.body caches load_body result '''
-    environ = with_body("Body", 4)
+    environ = environment("Body", 4)
     request = wsgi.Request(service, environ)
 
     # patch wsgi.load_body so we can watch call count
@@ -141,9 +133,9 @@ def test_chunked_body_matches_any_substr():
     assert wsgi.chunked_body(environ)
 
 
-def test_load_body_max_size():
+def test_load_body_max_size(environment):
     ''' load_body raises when CONTENT_LENGTH is too large '''
-    environ = with_body("", wsgi.MEMFILE_MAX + 1)
+    environ = environment("", wsgi.MEMFILE_MAX + 1)
     with pytest.raises(wsgi.RequestException):
         wsgi.load_body(environ)
 
@@ -157,23 +149,23 @@ def test_load_body_no_length_header():
         wsgi.load_body(environ)
 
 
-def test_load_body_partial_buffer():
+def test_load_body_partial_buffer(environment):
     ''' don't load more than CONTENT_LENGTH bytes '''
-    environ = with_body("Only this|None of this", 9)
+    environ = environment("Only this|None of this", 9)
     body = wsgi.load_body(environ)
     assert body == "Only this"
 
 
-def test_load_body_extra_buffer():
+def test_load_body_extra_buffer(environment):
     ''' don't read past the available buffer '''
-    environ = with_body("Only this", wsgi.MEMFILE_MAX)
+    environ = environment("Only this", wsgi.MEMFILE_MAX)
     body = wsgi.load_body(environ)
     assert body == "Only this"
 
 
-def test_load_body_not_reentrant():
+def test_load_body_not_reentrant(environment):
     ''' wsgi.input is consumed on read'''
-    environ = with_body("Only this", 9)
+    environ = environment("Only this", 9)
     body = wsgi.load_body(environ)
     different_body = wsgi.load_body(environ)
     assert body == "Only this"
@@ -186,9 +178,9 @@ def test_load_body_no_input():
     assert wsgi.load_body(environ) == ''
 
 
-def test_load_chunked_body_raises():
+def test_load_chunked_body_raises(environment):
     ''' chunked encoding isn't supported '''
-    environ = with_body("Hello", 100)
+    environ = environment("Hello", 100)
     environ["HTTP_TRANSFER_ENCODING"] = "chunked"
     with pytest.raises(wsgi.RequestException):
         wsgi.load_body(environ)

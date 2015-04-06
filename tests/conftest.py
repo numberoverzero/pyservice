@@ -1,3 +1,4 @@
+import io
 import pytest
 import pyservice
 
@@ -64,3 +65,20 @@ def observe(monkeypatch):
             self.calls.append((args, kwargs, result))
             return result
     return ObserverFactory
+
+
+@pytest.fixture
+def environment():
+    '''
+    Function that returns an environ with the given input and content length
+
+    Usage:
+
+    def test_foo(environment):
+        environ = environment("Hello, World", 12)
+        assert environ["CONTENT_LENGTH"] == "12"
+    '''
+    return lambda body, length: {
+        'CONTENT_LENGTH': str(length),
+        'wsgi.input': io.BytesIO(bytes(body, 'utf8'))
+    }
