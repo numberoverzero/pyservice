@@ -15,7 +15,10 @@ class Client(object):
         # Inserts format string at api["endpoint"]["client_pattern"]
         common.construct_client_pattern(api["endpoint"])
 
-        self.plugins = []
+        self.plugins = {
+            "request": [],
+            "operation": []
+        }
         self.exceptions = common.ExceptionFactory()
 
     def __getattr__(self, operation):
@@ -27,8 +30,13 @@ class Client(object):
         setattr(self, operation, func)
         return func
 
-    def plugin(self, func):
-        self.plugins.append(func)
+    def plugin(self, scope, *, func=None):
+        if scope not in ["request", "operation"]:
+            raise ValueError("Unknown scope {}".format(scope))
+        # Return decorator that takes function
+        if not func:
+            return lambda func: self.plugin(scope=scope, func=func)
+        self.plugins[scope].append(func)
         return func
 
     def __call__(self, operation, **request):
