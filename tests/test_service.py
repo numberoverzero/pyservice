@@ -114,7 +114,7 @@ def test_wsgi_application(service, environment, start_response):
 
     result = service.wsgi_application(environ, start_response)
     assert result == [bytes(return_value, 'utf8')]
-    assert process_args == [service, "foo", body]
+    assert process_args == ["foo", body]
     assert start_response.status == '200 OK'
     assert start_response.headers == [('Content-Length',
                                        str(len(return_value)))]
