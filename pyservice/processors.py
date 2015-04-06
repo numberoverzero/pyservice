@@ -17,8 +17,8 @@ def client(client, operation, request_body):
     return process()
 
 
-class ServiceProcessor(object):
-    def __init__(self, service, operation, request_body):
+class Processor(object):
+    def __init__(self, obj, operation):
         """
         A python class with __init__ and 1 or 2 functions is usually an
         anti-pattern, but in this case we're using it to simplify the
@@ -26,66 +26,215 @@ class ServiceProcessor(object):
         use context.process_request() without managing the state to pass
         to the next plugin, or in any way knowing if there is another plugin
         """
-        self.service = service
+        self.obj = obj
         # Don't rely on context's operation to be immutable
         self.operation = operation
 
         self.context = common.Context(self)
         self.context.operation = operation
-        self.context.service = service
 
         self.request = common.Container()
-        self.request_body = request_body
+        self.request_body = None
         self.response = common.Container()
         self.response_body = None
 
-        self.state = "request"  # request -> operation -> function
+        # request -> operation -> function
+        self.state = "request"
+        self.transitions = {
+            "request": "operation",
+            "operation": "function",
+            "function": None
+        }
         self.index = -1
+
+    @property
+    def result(self):
+        raise NotImplementedError("Subclasses must define result.")
 
     def __call__(self):
         """ Entry point for external callers """
         if self.state is None:
             raise ValueError("Already processed request")
+        self.continue_execution()
+        return self.result
+
+    def continue_execution(self):
+        # If this is the first time we've been in this state,
+        # give subclasses a chance to (de)serialize, load/dump containers, etc
+        call_after_state = False
+        if self.index == -1:
+            self.before_state(self.state)
+            # Since we're about to invoke the first plugin for this state,
+            # the recursive call will go through all remaining plugins for this
+            # state.  After that recursive call, this scope will be the first
+            # point after all plugins at this state ran, and we should call
+            # self.after_state(self.state).  However, self.state will have
+            # mutated (since this is recursive).  Therefore we store the state
+            # to invoke after_state with in the variable.
+            call_after_state = self.state
+
+        # We don't recurse for the next plugin during 'function' since there
+        # shouldn't be any function-scope plugins.
+        if self.state in ["request", "operation"]:
+            self._continue()
+        # We've made it!  Make the remote call or invoke the service handler
+        elif self.state == "function":
+            self._execute()
+
+        # If we called before_state in this scope, then we also need to call
+        # after_state in this scope (the rest of this scope was executed in)
+        # one of the recursive calls above
+        if call_after_state:
+            self.after_state(call_after_state)
+
+    def _continue(self):
+        ''' Call the next plugin '''
+        self.index += 1
+        # When state is function, there won't be any plugins
+        plugins = self.obj.plugins.get(self.state, [])
+        n = len(plugins)
+
+        # We're still working through the plugins for this scope
+        if self.index < n:
+            if self.state == "request":
+                plugins[self.index]()
+            elif self.state == "operation":
+                plugins[self.index](self.request, self.response, self.context)
+            else:
+                raise ValueError("Unexpected state '{}'".format(self.state))
+
+        # We just processed the last plugin for this state, either roll over
+        # to the next state or invoke the function underneath it all
+        elif self.index == n:
+
+            # Determine the next state and continue execution
+            if self.transitions[self.state]:
+                self.state = self.transitions[self.state]
+                self.index = -1
+                self.continue_execution()
+
+            # Otherwise this is a continue_execution call during the 'function'
+            # state and we can safely ignore it
+            else:
+                pass
+
+    def before_state(self, state):
+        ''' The state whose execution is about to begin '''
+        pass
+
+    def after_state(self, state):
+        ''' The state whose execution just finished '''
+        pass
+
+
+class ClientProcessor(Processor):
+    def __init__(self, client, operation, request):
+        super().__init__(client, operation)
+        self.context.client = client
+        self.request.update(request)
+
+    @property
+    def result(self):
+        return self.response
+
+    def _execute(self):
+        '''
+        1. Pack the request
+        2. Construct the endpoint
+        3. Unpack the response
+        4. Raise native errors if necessary
+        '''
+
+        self.request_body = common.serialize(self.request)
+
+        pattern = self.obj.api["endpoint"]["client_pattern"]
+        uri = pattern.format(operation=self.operation)
+        data = self.request_body
+        timeout = self.obj.api["timeout"]
+        response = requests.post(uri, data=data, timeout=timeout)
+
+        self.handle_http_error(response)
+        self.response_body = response.text
+        common.deserialize(self.response_body, self.response)
+        self.handle_service_exception()
+
+    def handle_http_error(self, response):
+        if wsgi.is_request_exception(response):
+            message = "{} {}".format(response.status_code, response.reason)
+            self.raise_exception({
+                "cls": "RequestException",
+                "args": (message,)
+            })
+
+    def handle_service_exception(self):
+        exception = self.response.get("__exception__", None)
+        if exception:
+            # Don't leak incomplete operation state if we're not debugging
+            if not self.obj.api["debug"]:
+                self.response.clear()
+            self.raise_exception(exception)
+
+    def raise_exception(self, exception):
+        name = exception["cls"]
+        args = exception["args"]
+        raise getattr(self.obj.exceptions, name)(*args)
+
+
+class ServiceProcessor(Processor):
+    def __init__(self, service, operation, request_body):
+        super().__init__(service, operation)
+        self.context.service = service
+        self.request_body = request_body
+
+    def __call__(self):
+        '''
+        Wrap exceptions so they can be serialized back to the client.
+
+        Exceptions that are thrown anywhere in the plugin chain may be allowed
+        to serialize back to the client, so we have to try/except the entire
+        call chain.
+        '''
         try:
-            self.continue_execution()
+            super().__call__()
         except Exception as exception:
             self.raise_exception(exception)
         finally:
-            return self.response_body
+            return self.result
 
-    def continue_execution(self):
-        self.index += 1
-        plugins = self.service.plugins[self.state]
-        n = len(plugins)
+    def before_state(self, state):
+        # Unpack request_body so it's available to operation scoped plugins
+        if state == "operation":
+            common.deserialize(self.request_body, self.request)
 
-        if self.index == n:
-            # Last plugin of this type, either roll over to the next plugin
-            # type, or invoke the function underneath it all
-            if self.state == "request":
-                self.index = -1
-                self.state = "operation"
+    def after_state(self, state):
+        # Pack response into response body so we can ship it back on the wire
+        # It's important to do this before the request-scope plugins clean up,
+        # since their state may be required to serialize the response body
+        if state == "operation":
+            self.response_body = common.serialize(self.response)
 
-                common.deserialize(self.request_body, self.request)
-                self.continue_execution()
-                self.response_body = common.serialize(self.response)
-            elif self.state == "operation":
-                func = self.service.functions[self.operation]
-                func(self.request, self.response, self.context)
-                self.state = None
-        # index < n
-        elif self.index < n:
-            if self.state == "request":
-                plugins[self.index](self.context)
-            elif self.state == "operation":
-                plugins[self.index](self.request, self.response, self.context)
+    @property
+    def result(self):
+        return self.response_body
+
+    def _execute(self):
+        '''
+        Invoke the service's function for the current operation
+        '''
+        func = self.obj.functions[self.operation]
+        func(self.request, self.response, self.context)
 
     def raise_exception(self, exception):
+        '''
+        Because this can occurr after after_state('operation') has already
+        fired, we have to make sure we re-serialize the response body.
+        '''
         name = exception.__class__.__name__
         args = exception.args
 
         # Don't let non-whitelisted exceptions escape if we're not debugging
-        whitelisted = name in self.service.api["exceptions"]
-        debugging = self.service.api["debug"]
+        whitelisted = name in self.obj.api["exceptions"]
+        debugging = self.obj.api["debug"]
         if not whitelisted and not debugging:
             raise wsgi.INTERNAL_ERROR
 
@@ -96,77 +245,3 @@ class ServiceProcessor(object):
             "args": args
         }
         self.response_body = common.serialize(self.response)
-
-
-class ClientProcessor(object):
-    def __init__(self, client, operation, request):
-        self.client = client
-        # Don't rely on context's operation to be immutable
-        self.operation = operation
-
-        self.context = common.Context(self)
-        self.context.operation = operation
-        self.context.client = client
-
-        self.request = common.Container()
-        self.request.update(request)
-        self.request_body = None
-        self.response = common.Container()
-        self.response_body = None
-
-        self.index = -1
-
-    def __call__(self):
-        """ Entry point for external callers """
-        self.continue_execution()
-        return self.response
-
-    def continue_execution(self):
-        self.index += 1
-        plugins = self.client.plugins
-        n = len(plugins)
-
-        if self.index == n:
-            # Last plugin of this type, package args and invoke remote call
-            self.remote_call()
-        # index < n
-        elif self.index < n:
-            plugins[self.index](self.request, self.response, self.context)
-        else:
-            # BUG - index > n means processor ran index over plugin length
-            raise ValueError("Bug in pyservice.ClientProcessor!")
-
-    def remote_call(self):
-        self.request_body = common.serialize(self.request)
-
-        pattern = self.client.api["endpoint"]["client_pattern"]
-        uri = pattern.format(operation=self.operation)
-        data = self.request_body
-        timeout = self.client.api["timeout"]
-        response = requests.post(uri, data=data, timeout=timeout)
-
-        self.handle_http_errors(response)
-        self.response_body = response.text
-        common.deserialize(self.response_body, self.response)
-        self.handle_service_exceptions()
-
-    def handle_http_errors(self, response):
-        if wsgi.is_request_exception(response):
-            message = "{} {}".format(response.status_code, response.reason)
-            self.raise_exception({
-                "cls": "RequestException",
-                "args": (message,)
-            })
-
-    def handle_service_exceptions(self):
-        exception = self.response.get("__exception__", None)
-        if exception:
-            # Don't leak incomplete operation state
-            self.response.clear()
-            self.raise_exception(exception)
-
-    def raise_exception(self, exception):
-        name = exception["cls"]
-        args = exception["args"]
-        exception = getattr(self.client.exceptions, name)(*args)
-        raise exception
