@@ -24,6 +24,12 @@ def service(api):
 
 
 @pytest.fixture
+def client(api):
+    ''' Return a client with a simple api '''
+    return pyservice.Client(**api)
+
+
+@pytest.fixture
 def start_response():
     ''' Function that stores status, headers on itself '''
     def func(status, headers):
