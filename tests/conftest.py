@@ -12,7 +12,7 @@ def api():
             "host": "localhost",
             "port": 8080
         },
-        "operations": ["foo"]
+        "operations": ["foo", "bar"]
     }
 
 
