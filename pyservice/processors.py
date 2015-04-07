@@ -5,26 +5,26 @@ request, particularly to minimize the burden on plugins to manage context
 from . import common
 from . import wsgi
 import requests
+missing = object()
 
 
-def service(service, operation, request_body):
-    processos = ServiceProcessor(service, operation, request_body)
-    return processos.process()
+def service(service, operation, request_body):  # pragma: no cover
+    ''' Wrap the Processor class to match the __processor__ interface '''
+    return ServiceProcessor(service, operation, request_body)()
 
 
-def client(client, operation, request_body):
-    processor = ClientProcessor(client, operation, request_body)
-    return processor.process()
+def client(client, operation, request_body):  # pragma: no cover
+    ''' Wrap the Processor class to match the __processor__ interface '''
+    return ClientProcessor(client, operation, request_body)()
 
 
 class Processor(object):
     def __init__(self, obj, operation):
         """
-        A python class with __init__ and 1 or 2 functions is usually an
-        anti-pattern, but in this case we're using it to simplify the
-        chaining contract for plugin authors.  This allows them to
-        use context.process_request() without managing the scope to pass
-        to the next plugin, or in any way knowing if there is another plugin
+        Simplifies the chaining contract for plugin authors.  This allows a
+        plugin to use context.process_request() without passing the request,
+        response, and context objects back into the chained call, and without
+        keeping track of the correct next plugni to call.
         """
         self.obj = obj
         # Don't rely on context's operation to be immutable
@@ -47,8 +47,8 @@ class Processor(object):
         }
         self.index = -1
 
-    def process(self):
-        """ Entry point for external callers """
+    def __call__(self):
+        """ Entry point for external callers to begin processing """
         if self.scope is None:
             raise ValueError("Already processed request")
         self.process_request()
@@ -66,38 +66,29 @@ class Processor(object):
         """
         # If this is the first time we've been in this scope,
         # give subclasses a chance to (de)serialize, load/dump containers, etc
-        call_exit_scope = False
-        if self.index == -1:
-            self.enter_scope(self.scope)
-            # Since we're about to invoke the first plugin for this scope,
-            # the recursive call will go through all remaining plugins for this
-            # scope.  After that recursive call, this scope will be the first
-            # point after all plugins at this scope ran, and we should call
-            # self.exit_scope(self.scope).  However, self.scope will have
-            # mutated (since this is recursive).  Therefore we store the scope
-            # to invoke exit_scope with in the variable.
-            call_exit_scope = self.scope
+        is_first_plugin = self.index == -1
 
-        # We don't recurse for the next plugin during 'function' since there
-        # shouldn't be any function-scope plugins.
-        if self.scope in ["request", "operation"]:
-            self._continue()
-        # We've made it!  Make the remote call or invoke the service handler
-        elif self.scope == "function":
-            self._execute()
+        # Keep a reference to the scope in this function call, since we know
+        # self.scope will mutate as this recurses
+        local_scope = self.scope
+
+        if is_first_plugin:
+            self.enter_scope(local_scope)
+
+        self._continue()
 
         # If we called enter_scope in this scope, then we also need to call
         # exit_scope in this scope (the rest of this scope was executed in)
         # one of the recursive calls above
-        if call_exit_scope:
-            self.exit_scope(call_exit_scope)
+        if is_first_plugin:
+            self.exit_scope(local_scope)
 
     def _continue(self):
         ''' Call the next plugin '''
-        self.index += 1
         # When scope is function, there won't be any plugins
         plugins = self.obj.plugins.get(self.scope, [])
         n = len(plugins)
+        self.index += 1
 
         # We're still working through the plugins for this scope
         if self.index < n:
@@ -113,29 +104,29 @@ class Processor(object):
         elif self.index == n:
 
             # Determine the next scope and continue execution
-            if self.transitions[self.scope]:
-                self.scope = self.transitions[self.scope]
+            next_scope = self.transitions.get(self.scope, missing)
+            if next_scope is not missing:
+                self.scope = next_scope
                 self.index = -1
                 self.process_request()
-
-            # Otherwise this is a process_request call during the 'function'
-            # scope and we can safely ignore it
+            # Otherwise, we've finished the last set of scoped plugins
+            # (function) and need to call the underlying function
             else:
-                pass
+                self._execute()
 
-    def _execute(self):
+    def _execute(self):  # pragma: no cover
         raise NotImplementedError("Subclasses must implement _execute.")
 
-    def enter_scope(self, scope):
+    def enter_scope(self, scope):  # pragma: no cover
         ''' The scope whose execution is about to begin '''
         pass
 
-    def exit_scope(self, scope):
+    def exit_scope(self, scope):  # pragma: no cover
         ''' The scope whose execution just finished '''
         pass
 
     @property
-    def result(self):
+    def result(self):  # pragma: no cover
         raise NotImplementedError("Subclasses must define result.")
 
 
@@ -149,8 +140,10 @@ class ClientProcessor(Processor):
         '''
         1. Pack the request
         2. Construct the endpoint
-        3. Unpack the response
-        4. Raise native errors if necessary
+        3. Call the endpoint with the packed request
+        4. Raise native errors on http failure
+        5. Unpack the response
+        6. Raise native errors on service exceptions
         '''
 
         self.request_body = common.serialize(self.request)
@@ -198,7 +191,7 @@ class ServiceProcessor(Processor):
         self.context.service = service
         self.request_body = request_body
 
-    def process(self):
+    def __call__(self):
         '''
         Wrap exceptions so they can be serialized back to the client.
 
@@ -209,7 +202,7 @@ class ServiceProcessor(Processor):
         try:
             # Don't need to persist the result since we'll
             # return self.result below anyway
-            super().process()
+            super().__call__()
         except Exception as exception:
             self.raise_exception(exception)
         finally:
