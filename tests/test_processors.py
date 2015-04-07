@@ -5,11 +5,8 @@ from pyservice import processors, Client
 
 
 class RequestPostCapture:
-    class Response:
-        def __init__(self, status_code, text, reason=None):
-            self.status_code = status_code
-            self.text = text
-            self.reason = reason
+    Response = collections.namedtuple(
+        "Response", ["status_code", "text", "reason"])
 
     def __init__(self, status_code, text, reason=None):
         self.response = self.Response(status_code, text, reason=reason)
@@ -22,7 +19,13 @@ class RequestPostCapture:
 
 
 @pytest.fixture
-def with_post(monkeypatch):
+def set_response(monkeypatch):
+    '''
+    Patch requests.post to return the given status, text, and reason.
+
+    The return value can be used to inspect the captured input to the patched
+    method.  Available fields are uri, data, timeout.
+    '''
     def make_capture(status_code, text, reason=None):
         capture = RequestPostCapture(status_code, text, reason=reason)
         monkeypatch.setattr("requests.post", capture.post)
@@ -100,7 +103,7 @@ def test_processor_plugin_scopes():
     assert called == ["request", "operation"]
 
 
-def test_client_processor_posts(client, with_post):
+def test_client_processor_posts(client, set_response):
     ''' Result should be unpacked from request.post '''
     operation = "foo"
     request = {"key": "value"}
@@ -108,29 +111,30 @@ def test_client_processor_posts(client, with_post):
 
     status_code = 200
     text = ujson.dumps({"greeting": ["Hello", "World!"]})
-    request_capture = with_post(status_code, text)
+    request_capture = set_response(status_code, text)
 
     result = process()
     assert result.greeting == ["Hello", "World!"]
 
     assert request_capture.uri == "http://localhost:8080/test/foo"
+    assert request_capture.timeout == client.api["timeout"]
     assert ujson.loads(request_capture.data) == request
 
 
-def test_client_handle_http_error(client, with_post):
+def test_client_handle_http_error(client, set_response):
     '''
     ClientProcessor should raise a real exception when the status is not 200
     '''
     operation = "foo"
     request = {"key": "value"}
     process = processors.ClientProcessor(client, operation, request)
-    with_post(404, '', reason="Not Found")
+    set_response(404, '', reason="Not Found")
 
     with pytest.raises(client.exceptions.RequestException):
         process()
 
 
-def test_client_handle_remote_error(client, with_post):
+def test_client_handle_remote_error(client, set_response):
     ''' Correctly raise a remote exception '''
     operation = "foo"
     request = {"key": "value"}
@@ -145,14 +149,14 @@ def test_client_handle_remote_error(client, with_post):
             "this should not": "be accessible"
         }
     })
-    with_post(200, exception_text)
+    set_response(200, exception_text)
 
     # Make sure we actually raise
     with pytest.raises(getattr(client.exceptions, "FooExceptionClass")):
         process()
 
 
-def test_client_debug_remote_error(client, with_post):
+def test_client_debug_remote_error(client, set_response):
     '''
     Plugins should have access to the response body after an
     exception when we're debugging
@@ -171,7 +175,7 @@ def test_client_debug_remote_error(client, with_post):
             "this should": "be available"
         }
     })
-    with_post(200, exception_text)
+    set_response(200, exception_text)
     captured_response = {}
 
     @client.plugin(scope="operation")
