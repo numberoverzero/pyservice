@@ -50,7 +50,7 @@ class Processor(object):
     def __call__(self):
         """ Entry point for external callers to begin processing """
         if self.scope is None:
-            raise ValueError("Already processed request")
+            raise RuntimeError("Already processed request")
         self.process_request()
         return self.result
 
@@ -90,18 +90,9 @@ class Processor(object):
         n = len(plugins)
         self.index += 1
 
-        # We're still working through the plugins for this scope
-        if self.index < n:
-            if self.scope == "request":
-                plugins[self.index]()
-            elif self.scope == "operation":
-                plugins[self.index](self.request, self.response, self.context)
-            else:
-                raise ValueError("Unexpected scope '{}'".format(self.scope))
-
         # We just processed the last plugin for this scope, either roll over
         # to the next scope or invoke the function underneath it all
-        elif self.index == n:
+        if self.index == n:
 
             # Determine the next scope and continue execution
             next_scope = self.transitions.get(self.scope, missing)
@@ -113,6 +104,22 @@ class Processor(object):
             # (function) and need to call the underlying function
             else:
                 self._execute()
+
+        # We're still working through the plugins for this scope
+        else:  # self.index < n
+            # This is an assert instead of an exception because there's no
+            # single best way to recover from walking off the end of the
+            # available plugins - return, increment scope, raise?
+            assert self.index < n, "index exceeded length of plugins"
+
+            if self.scope == "request":
+                plugins[self.index](self.context)
+            elif self.scope == "operation":
+                plugins[self.index](self.request, self.response, self.context)
+            # Don't know how to handle plugins of other types, this is likely
+            # a bug.  Raise an error immediately instead of silently hanging
+            else:  # pragma: no cover
+                raise ValueError("Unexpected scope '{}'".format(self.scope))
 
     def _execute(self):  # pragma: no cover
         raise NotImplementedError("Subclasses must implement _execute.")

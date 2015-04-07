@@ -6,7 +6,10 @@ from pyservice import processors
 class PluginObj:
     ''' Mock client/service with plugins '''
     def __init__(self):
-        self.plugins = {}
+        self.plugins = {
+            "request": [],
+            "operation": []
+        }
 
 
 class TestProcessor(processors.Processor):
@@ -15,6 +18,7 @@ class TestProcessor(processors.Processor):
         obj = PluginObj()
         super().__init__(obj, operation)
         self.calls = collections.defaultdict(int)
+        self._plugin_obj = obj
         self._result = result
 
     def _execute(self):
@@ -53,5 +57,28 @@ def test_processor_multiple_calls():
     process = TestProcessor("not used", "also not used")
     process()
 
-    with pytest.raises(ValueError):
+    with pytest.raises(RuntimeError):
         process()
+
+
+def test_processor_plugin_scopes():
+    ''' Ensure plugins in request and operation scopes are invoked '''
+    operation = "my_operation"
+    process = TestProcessor(operation, "not used")
+
+    called = []
+
+    def request_plugin(context):
+        called.append("request")
+        assert context.operation == operation
+        context.process_request()
+    process._plugin_obj.plugins["request"].append(request_plugin)
+
+    def operation_plugin(request, response, context):
+        called.append("operation")
+        assert context.operation == operation
+        context.process_request()
+    process._plugin_obj.plugins["operation"].append(operation_plugin)
+
+    process()
+    assert called == ["request", "operation"]
