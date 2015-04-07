@@ -1,4 +1,4 @@
-from examples import load_api
+from examples import load_api, basic_wsgi
 import pyservice
 
 service = pyservice.Service(**load_api('echo/api.json'))
@@ -27,8 +27,8 @@ def echo(request, response, context):
 # plugins, that need to ensure the request has been serialized before they
 # close (such as sqlalchemy)
 
-# For now we'll only authenticate calls to the `echo` operation, with a set of
-# super secret credentials
+# For now we'll only authenticate calls to the echo operation,
+# with some super secret credentials
 expected_user = "admin"
 expected_password = "hunter2"
 auth_required = ["echo"]
@@ -46,14 +46,6 @@ def auth_n(request, response, context):
         raise service.exceptions.Unauthorized("Invalid credentials.")
 
 
-def main():
-    # using http because wsgiref doesn't support TLS
-    from wsgiref.simple_server import make_server
-
-    host = service.api["endpoint"]["host"]
-    port = service.api["endpoint"]["port"]
-    httpd = make_server(host, port, service.wsgi_application)
-    httpd.serve_forever()
-
 if __name__ == "__main__":
-    main()
+    # Start the service immediately
+    basic_wsgi(service)
