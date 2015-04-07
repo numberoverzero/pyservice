@@ -187,3 +187,87 @@ def test_client_debug_remote_error(client, with_post):
     process()
 
     assert captured_response["extra"] == {"this should": "be available"}
+
+
+def test_service_processor_invokes_function(service):
+    ''' The mapped function for the operation should be called '''
+
+    called = False
+    request_body = ujson.dumps({"key": "value"})
+
+    @service.operation("foo")
+    def foo(request, response, context):
+        nonlocal called
+        called = True
+
+        assert request.key == "value"
+
+    process = processors.ServiceProcessor(service, "foo", request_body)
+
+    assert not called
+    process()
+    assert called
+
+
+def test_service_processor_raises_whitelisted(service):
+    ''' Serialize and return a whitelisted exception '''
+
+    service.api["exceptions"].append("FooException")
+
+    @service.operation("foo")
+    def foo(request, response, context):
+        raise service.exceptions.FooException(2, "args")
+
+    process = processors.ServiceProcessor(service, "foo", "{}")
+    result = process()
+
+    expected = {
+        "__exception__": {
+            "cls": "FooException",
+            "args": [2, "args"]
+        }
+    }
+    assert ujson.loads(result) == expected
+
+
+def test_service_processor_raises_debugging(service):
+    ''' Serialize and return non-whitelist when debugging '''
+
+    @service.operation("foo")
+    def foo(request, response, context):
+        raise service.exceptions.FooException(2, "args")
+
+    process = processors.ServiceProcessor(service, "foo", "{}")
+
+    # Don't redact exception when debugging
+    service.api["debug"] = True
+    result = process()
+
+    expected = {
+        "__exception__": {
+            "cls": "FooException",
+            "args": [2, "args"]
+        }
+    }
+    assert ujson.loads(result) == expected
+
+
+def test_service_processor_redacts_non_whitelist(service):
+    ''' Scrub non-whitelist exception data when not debugging '''
+
+    @service.operation("foo")
+    def foo(request, response, context):
+        raise service.exceptions.FooException(2, "args")
+
+    process = processors.ServiceProcessor(service, "foo", "{}")
+
+    # Don't redact exception when debugging
+    result = process()
+
+    expected = {
+        "__exception__": {
+            "cls": "RequestException",
+            "args": [500]
+        }
+    }
+    assert ujson.loads(result) == expected

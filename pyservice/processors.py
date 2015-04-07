@@ -250,7 +250,8 @@ class ServiceProcessor(Processor):
         whitelisted = name in self.obj.api["exceptions"]
         debugging = self.obj.api["debug"]
         if not whitelisted and not debugging:
-            raise wsgi.INTERNAL_ERROR
+            name = wsgi.INTERNAL_ERROR.__class__.__name__
+            args = wsgi.INTERNAL_ERROR.args
 
         # Don't leak incomplete operation state
         self.response.clear()
