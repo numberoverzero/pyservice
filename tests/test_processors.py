@@ -33,7 +33,7 @@ def set_response(monkeypatch):
     return make_capture
 
 
-class TestProcessor(processors.Processor):
+class Processor(processors.Processor):
     ''' Processor that tracks _execute, enter|exit scope, and result calls '''
     def __init__(self, operation, result):
         super().__init__(Client(), operation)
@@ -59,7 +59,7 @@ def test_processor_workflow():
     ''' Ensure enter|exit scope and _execute are all called once '''
     operation = "my_operation"
     expected_result = "this is the result"
-    process = TestProcessor(operation, expected_result)
+    process = Processor(operation, expected_result)
     assert not process.calls
 
     result = process()
@@ -73,7 +73,7 @@ def test_processor_workflow():
 
 def test_processor_multiple_calls():
     ''' Can't process more than once '''
-    process = TestProcessor("not used", "also not used")
+    process = Processor("not used", "also not used")
     process()
 
     with pytest.raises(RuntimeError):
@@ -83,7 +83,7 @@ def test_processor_multiple_calls():
 def test_processor_plugin_scopes():
     ''' Ensure plugins in request and operation scopes are invoked '''
     operation = "my_operation"
-    process = TestProcessor(operation, "not used")
+    process = Processor(operation, "not used")
 
     called = []
 
