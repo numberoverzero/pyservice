@@ -1,24 +1,40 @@
+import ujson
 import pytest
 import collections
-from pyservice import processors
+from pyservice import processors, Client
 
 
-class PluginObj:
-    ''' Mock client/service with plugins '''
-    def __init__(self):
-        self.plugins = {
-            "request": [],
-            "operation": []
-        }
+class RequestPostCapture:
+    class Response:
+        def __init__(self, status_code, text, reason=None):
+            self.status_code = status_code
+            self.text = text
+            self.reason = reason
+
+    def __init__(self, status_code, text, reason=None):
+        self.response = self.Response(status_code, text, reason=reason)
+
+    def post(self, uri, data, timeout):
+        self.uri = uri
+        self.data = data
+        self.timeout = timeout
+        return self.response
+
+
+@pytest.fixture
+def with_post(monkeypatch):
+    def make_capture(status_code, text, reason=None):
+        capture = RequestPostCapture(status_code, text, reason=reason)
+        monkeypatch.setattr("requests.post", capture.post)
+        return capture
+    return make_capture
 
 
 class TestProcessor(processors.Processor):
     ''' Processor that tracks _execute, enter|exit scope, and result calls '''
     def __init__(self, operation, result):
-        obj = PluginObj()
-        super().__init__(obj, operation)
+        super().__init__(Client(), operation)
         self.calls = collections.defaultdict(int)
-        self._plugin_obj = obj
         self._result = result
 
     def _execute(self):
@@ -68,17 +84,106 @@ def test_processor_plugin_scopes():
 
     called = []
 
+    @process.obj.plugin(scope="request")
     def request_plugin(context):
         called.append("request")
         assert context.operation == operation
         context.process_request()
-    process._plugin_obj.plugins["request"].append(request_plugin)
 
+    @process.obj.plugin(scope="operation")
     def operation_plugin(request, response, context):
         called.append("operation")
         assert context.operation == operation
         context.process_request()
-    process._plugin_obj.plugins["operation"].append(operation_plugin)
 
     process()
     assert called == ["request", "operation"]
+
+
+def test_client_processor_posts(client, with_post):
+    ''' Result should be unpacked from request.post '''
+    operation = "foo"
+    request = {"key": "value"}
+    process = processors.ClientProcessor(client, operation, request)
+
+    status_code = 200
+    text = ujson.dumps({"greeting": ["Hello", "World!"]})
+    request_capture = with_post(status_code, text)
+
+    result = process()
+    assert result.greeting == ["Hello", "World!"]
+
+    assert request_capture.uri == "http://localhost:8080/test/foo"
+    assert ujson.loads(request_capture.data) == request
+
+
+def test_client_handle_http_error(client, with_post):
+    '''
+    ClientProcessor should raise a real exception when the status is not 200
+    '''
+    operation = "foo"
+    request = {"key": "value"}
+    process = processors.ClientProcessor(client, operation, request)
+    with_post(404, '', reason="Not Found")
+
+    with pytest.raises(client.exceptions.RequestException):
+        process()
+
+
+def test_client_handle_remote_error(client, with_post):
+    ''' Correctly raise a remote exception '''
+    operation = "foo"
+    request = {"key": "value"}
+    process = processors.ClientProcessor(client, operation, request)
+
+    exception_text = ujson.dumps({
+        "__exception__": {
+            "cls": "FooExceptionClass",
+            "args": ("text", 1, False)
+        },
+        "extra": {
+            "this should not": "be accessible"
+        }
+    })
+    with_post(200, exception_text)
+
+    # Make sure we actually raise
+    with pytest.raises(getattr(client.exceptions, "FooExceptionClass")):
+        process()
+
+
+def test_client_debug_remote_error(client, with_post):
+    '''
+    Plugins should have access to the response body after an
+    exception when we're debugging
+     '''
+    operation = "foo"
+    request = {"key": "value"}
+    exception = getattr(client.exceptions, "FooExceptionClass")
+    process = processors.ClientProcessor(client, operation, request)
+
+    exception_text = ujson.dumps({
+        "__exception__": {
+            "cls": exception.__name__,
+            "args": (2, 'args')
+        },
+        "extra": {
+            "this should": "be available"
+        }
+    })
+    with_post(200, exception_text)
+    captured_response = {}
+
+    @client.plugin(scope="operation")
+    def capture_extra(request, response, context):
+        try:
+            context.process_request()
+        except exception:
+            captured_response.update(response)
+
+    # Don't clear response on exception
+    client.api["debug"] = True
+
+    process()
+
+    assert captured_response["extra"] == {"this should": "be available"}
